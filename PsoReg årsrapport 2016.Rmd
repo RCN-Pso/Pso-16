@@ -15,7 +15,7 @@ setwd("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/Pso 
 library(stringr)
 
 #Läser in data med kontakter från PsoReg
-Pso_contact <- read.delim("Kontaktnivå 20160118.txt",header=TRUE,sep="\t",encoding="UTF-8")
+Pso_contact <- read.delim("Kontaktnivå 20160118.txt",header=TRUE,sep="\t",encoding="UTF-8", dec=",")
 
 #namnger variablerna ändra datatyper, plockar bort testpatienter och plockar bort kontakter utan kontaktdatum och kontakter efter 2015-12-31
 names(Pso_contact)[1:9]<- c("PERSNR","Pnyckel_contact","Pnyckel_root","Fnyckel_contact","PAT_ID","Kön","Aktiv_patient", "Sjukhus","ContactDate")
@@ -46,6 +46,12 @@ Pso_contact$Registred_year_moth <- paste(as.character(Pso_contact$Registred_year
 Pso_individ<-subset(Pso_contact,dupli_PatientID==FALSE)
 ###############
 
+
+
+```
+
+
+```{r databearbetningar 2, echo=FALSE}
 #####Läser in fil med systembehandlingar#####
 
 #Läser in data med PsoReg data för att skapa dataset med behandlingar
@@ -89,6 +95,22 @@ Pso_bio <- Pso_bio[order(Pso_bio$PERSNR,decreasing=FALSE),]
 Pso_bio$dupli_PatientID <- duplicated(Pso_bio$PERSNR)
 Pso_bio<-subset(Pso_bio,dupli_PatientID==FALSE)
 
+```
+
+```{r databearbetningar 3, echo=FALSE}
+### plockar bort orimliga värden###
+
+Pso_contact$Height[Pso_contact$Height>300] <- NA
+Pso_contact$Height[Pso_contact$Height<100] <- NA
+
+Pso_contact$Weight[Pso_contact$Weight>500] <- NA
+Pso_contact$Weight[Pso_contact$Weight<20] <- NA
+
+Pso_contact$Waist[Pso_contact$Waist>300] <- NA
+Pso_contact$Waist[Pso_contact$Waist<20] <- NA
+
+Pso_contact$BMI <- Pso_contact$Weight/(Pso_contact$Height/100)^2
 
 ```
+
 
