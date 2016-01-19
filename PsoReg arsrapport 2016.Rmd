@@ -9,10 +9,8 @@ output: word_document
 setwd("C:/WD/PsoReg/PsoReg/")
 
 library(knitr)
-
 library(stringr)
 #library(data.table)
-
 
 #Läser in data med kontakter från PsoReg
 Pso_contact <- read.delim("Kontaktnivå 20160118.txt",header=TRUE,sep="\t",encoding="UTF-8", dec=",")
