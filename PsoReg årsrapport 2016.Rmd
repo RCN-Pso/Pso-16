@@ -4,11 +4,15 @@ author: "martin"
 date: "18 januari 2016"
 output: word_document
 ---
-
 ```{r databearbetningar1, echo=FALSE}
-setwd("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/Pso årsrapport 2016/Pso-16")
+#setwd("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/Pso årsrapport 2016/Pso-16")
+setwd("C:/WD/PsoReg/PsoReg/")
+
 library(knitr)
+
 library(stringr)
+#library(data.table)
+
 
 #Läser in data med kontakter från PsoReg
 Pso_contact <- read.delim("Kontaktnivå 20160118.txt",header=TRUE,sep="\t",encoding="UTF-8", dec=",")
@@ -119,3 +123,19 @@ tab_patienter <- as.data.frame(tab_patienter)
 kable(tab_patienter)
 ```
 
+```{r antal_pat_årsrapport, echo=FALSE}
+
+Sort= Pso_contact[with(Pso_contact, order(as.Date(Pso_contact$ContactDate), Pso_contact$PERSNR)), ]  #sorterar patient enligt reg.datum och  
+Sort$unikaPNR <- duplicated(Sort$PERSNR)
+Sort=subset(Sort,Sort$unikaPNR==FALSE)
+ar=format(as.Date(Sort$ContactDate), "%Y")
+Sort$ar=ar
+Sort=Sort[-c(1,2),]
+
+Tabelle=table(Sort$ar)
+as.matrix(Tabelle)
+
+par(mfcol=c(1,1))
+y=sort(unique(Sort$ar))
+plot(y,cumsum(as.matrix(Tabelle)),type="l",xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2")
+```
