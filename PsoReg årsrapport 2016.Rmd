@@ -5,13 +5,9 @@ date: "18 januari 2016"
 output: word_document
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
 ```{r databearbetningar1, echo=FALSE}
 setwd("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/Pso årsrapport 2016/Pso-16")
-
+library(knitr)
 library(stringr)
 
 #Läser in data med kontakter från PsoReg
@@ -113,4 +109,13 @@ Pso_contact$BMI <- Pso_contact$Weight/(Pso_contact$Height/100)^2
 
 ```
 
+
+```{r tabell_patientantal, echo=FALSE}
+
+tab_patienter <- sort(table(Pso_individ$Sjukhus), decreasing=TRUE)
+
+tab_patienter <- as.data.frame(tab_patienter)
+
+kable(tab_patienter)
+```
 
