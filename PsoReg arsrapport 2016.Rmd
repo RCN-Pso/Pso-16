@@ -136,12 +136,7 @@ as.matrix(Tabelle)
 par(mfcol=c(1,1))
 y=sort(unique(Sort$ar))
 plot(y,cumsum(as.matrix(Tabelle)),type="l",xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2")
-# hej joop
 ```
 
 
-```{r antal_pat_årsrapport, echo=FALSE}
-
-# Hejsan commit pull push Giiiiit fattari ngenting
-```
 
