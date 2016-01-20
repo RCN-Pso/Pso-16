@@ -3,3 +3,6 @@
 .Rhistory
 .RData
 /data
+*_cache
+*_files
+*.html
