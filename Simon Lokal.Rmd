@@ -137,13 +137,19 @@ Sort=Sort[-c(1,2),]
 
 artab <- Sort %>% group_by(ar) %>% summarise(n = n())
 
-Tabelle=table(Sort$ar)
-as.matrix(Tabelle)
-
 par(mfcol=c(1,1))
-y=sort(unique(Sort$ar))
-plot(y,cumsum(as.matrix(Tabelle)),type="l",xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2")
-# hej joop
+plot(artab$ar, cumsum(artab$n), type = 'l',xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2",xlim=c(2006,2015),ylim=c(0,5200),yaxs="i",xaxs="i",xaxt="n")
+axis(1, at = seq(2006, 2015, by = 1), las=2)
+lines(x=c(2006,2015),y=c(1000,1000),lty = 2, col ="gray")
+lines(x=c(2006,2015),y=c(2000,2000),lty = 2, col ="gray")
+lines(x=c(2006,2015),y=c(3000,3000),lty = 2, col ="gray")
+lines(x=c(2006,2015),y=c(4000,4000),lty = 2, col ="gray")
+lines(x=c(2006,2015),y=c(5000,5000),lty = 2, col ="gray")
+
+points(2006,7)
+sum(as.vector(artab[1:2,2]))
+points()
+
 ```
 
 
