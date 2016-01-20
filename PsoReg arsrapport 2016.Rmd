@@ -121,7 +121,7 @@ tab_patienter <- as.data.frame(tab_patienter)
 kable(tab_patienter)
 ```
 
-```{r antal_pat_årsrapport, echo=FALSE}
+```{r antal_pat_arsrapport, echo=FALSE}
 
 Sort= Pso_contact[with(Pso_contact, order(as.Date(Pso_contact$ContactDate), Pso_contact$PERSNR)), ]  #sorterar patient enligt reg.datum och  
 Sort$unikaPNR <- duplicated(Sort$PERSNR)
@@ -130,12 +130,26 @@ ar=format(as.Date(Sort$ContactDate), "%Y")
 Sort$ar=ar
 Sort=Sort[-c(1,2),]
 
-Tabelle=table(Sort$ar)
-as.matrix(Tabelle)
+artab <- Sort %>% group_by(ar) %>% summarise(n = n())
 
 par(mfcol=c(1,1))
-y=sort(unique(Sort$ar))
-plot(y,cumsum(as.matrix(Tabelle)),type="l",xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2")
+plot(artab$ar, cumsum(artab$n), type = 'l',xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2",xlim=c(2005.8,2015.3),ylim=c(0,5400),yaxs="i",xaxs="i",xaxt="n")
+axis(1, at = seq(2006, 2015, by = 1), las=2)
+lines(x=c(2005.8,2015.3),y=c(1000,1000),lty = 2, col ="gray") #genererar grids
+lines(x=c(2005.8,2015.3),y=c(2000,2000),lty = 2, col ="gray")
+lines(x=c(2005.8,2015.3),y=c(3000,3000),lty = 2, col ="gray")
+lines(x=c(2005.8,2015.3),y=c(4000,4000),lty = 2, col ="gray")
+lines(x=c(2005.8,2015.3),y=c(5000,5000),lty = 2, col ="gray")
+
+# lägger in punkter och akumulerat antal patienter för varje år
+for (i in 2:10) {                                             
+  points(2005+i,sum(as.vector(artab[1:i,2])),pch = 20,col="firebrick1")
+  text(2005+i-0.13,sum(as.vector(artab[1:i,2]))+180,sum(as.vector(artab[1:i,2])))
+  }
+points(2006,sum(as.vector(artab[1:1,2])),pch = 20,col="firebrick1")
+  text(2006+0.03,sum(as.vector(artab[1:1,2]))+180,sum(as.vector(artab[1:1,2])))
+
+```
 ```
 
 
