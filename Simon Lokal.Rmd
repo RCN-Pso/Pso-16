@@ -8,6 +8,7 @@ output: html_document
 ```{r librarys, warning=FALSE, message = FALSE}
 library(knitr)
 library(stringr)
+library(GynopTools)
 ```
 
 ```{r databearbetningar1, echo=FALSE, cache=TRUE}
@@ -138,23 +139,32 @@ Sort=Sort[-c(1,2),]
 artab <- Sort %>% group_by(ar) %>% summarise(n = n())
 
 par(mfcol=c(1,1))
-plot(artab$ar, cumsum(artab$n), type = 'l',xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2",xlim=c(2005.8,2015.3),ylim=c(0,5400),yaxs="i",xaxs="i",xaxt="n")
-axis(1, at = seq(2006, 2015, by = 1), las=2)
-lines(x=c(2005.8,2015.3),y=c(1000,1000),lty = 2, col ="gray") #genererar grids
-lines(x=c(2005.8,2015.3),y=c(2000,2000),lty = 2, col ="gray")
-lines(x=c(2005.8,2015.3),y=c(3000,3000),lty = 2, col ="gray")
-lines(x=c(2005.8,2015.3),y=c(4000,4000),lty = 2, col ="gray")
-lines(x=c(2005.8,2015.3),y=c(5000,5000),lty = 2, col ="gray")
+
+plot(artab$ar, cumsum(artab$n), type = 'l',xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2",xlim=c(2005.8,as.integer(max(artab$ar))+0.3),ylim=c(0,sum(artab$n)*1.05),yaxs="i",xaxs="i",xaxt="n")
+
+axis(1, at = seq(2006, as.integer(max(artab$ar)), by = 1), las=2)
+
+lines(x=c(as.integer(min(artab$ar))+0.3,as.integer(max(artab$ar))+0.3),y=c(1000,1000),lty = 2, col ="gray") 
+lines(x=c(as.integer(min(artab$ar))+0.3,as.integer(max(artab$ar))+0.3),y=c(2000,2000),lty = 2, col ="gray")
+lines(x=c(as.integer(min(artab$ar))+0.3,as.integer(max(artab$ar))+0.3),y=c(3000,3000),lty = 2, col ="gray")
+lines(x=c(as.integer(min(artab$ar))+0.3,as.integer(max(artab$ar))+0.3),y=c(4000,4000),lty = 2, col ="gray")
+lines(x=c(as.integer(min(artab$ar))+0.3,as.integer(max(artab$ar))+0.3),y=c(5000,5000),lty = 2, col ="gray")
 
 # lägger in punkter och akumulerat antal patienter för varje år
-for (i in 2:10) {                                             
+for (i in 2:length(artab$ar)
+) {                                             
   points(2005+i,sum(as.vector(artab[1:i,2])),pch = 20,col="firebrick1")
   text(2005+i-0.13,sum(as.vector(artab[1:i,2]))+180,sum(as.vector(artab[1:i,2])))
   }
 points(2006,sum(as.vector(artab[1:1,2])),pch = 20,col="firebrick1")
   text(2006+0.03,sum(as.vector(artab[1:1,2]))+180,sum(as.vector(artab[1:1,2])))
+```
+
+```{r utfallsM_arsrapport, echo=FALSE}
+
+PASI=Pso_contact
+
 
 ```
 
-
-
+head(Pso_contact)
