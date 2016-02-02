@@ -163,9 +163,54 @@ points(2006,sum(as.vector(artab[1:1,2])),pch = 20,col="firebrick1")
 
 ```{r utfallsM_arsrapport, echo=FALSE}
 
-PASI=Pso_contact
+# Test med medelvärde på PASI mot klinik, inte jättebra staplar ännu...
+A21=as.data.frame(colMeans(as.matrix(table((Pso_contact$PASI_index),Pso_contact$Sjukhus))))
+A22=as.vector(A21)
+PASI=as.vector(A22$`colMeans(as.matrix(table(Pso_contact$PASI_index, Pso_contact$Sjukhus)))`)
+Sjukhus=rownames(A21)
+testData=data.frame(Sjukhus,PASI)
+testData$n=round(PASI*100,digits = 2)
+
+
+
+figdata <- testData %>% select(Sjukhus, PASI,n) %>% 
+      mutate(quarter = cut(PASI, breaks = c(-0.01,1.5,5,8,20), labels = c('Q1','Q2','Q3','Q4'))) %>% 
+      group_by(Sjukhus, quarter) %>% data.frame()
+
+
+gbarplot(figdata, variable = 'quarter', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T)
+
+gbarplot(figdata, variable = 'quarter', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,stacked = F)
+
+
 
 
 ```
 
-head(Pso_contact)
+```{r utfallsM_arsrapport2, echo=FALSE}
+######## Antal patinter per kvartal
+
+Pso_contact1=Pso_contact
+Pso_contact1$ar=format(as.Date(Pso_contact1$ContactDate), "%Y")
+Pso_contact1$monad=as.numeric(format(as.Date(Pso_contact1$ContactDate), "%m"))
+Pso_contact1=subset(Pso_contact1,ar==2015)
+
+Pso_contact1= Pso_contact1[with(Pso_contact1, order(as.Date(Pso_contact1$ContactDate), Pso_contact1$PERSNR)), ]  #sorterar patient enligt kont.datum & PNR  
+Pso_contact1$unikaPNR <- duplicated(Pso_contact1$PERSNR)
+Pso_contact1=subset(Pso_contact1,Pso_contact1$unikaPNR==FALSE)
+dim(Pso_contact1)
+
+figdata <- Pso_contact1 %>% select(Sjukhus, monad) %>% 
+      mutate(quarter = cut(monad, breaks = c(0,3,6,9,12), labels = c('Q1','Q2','Q3','Q4'))) %>% 
+      group_by(Sjukhus, quarter) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'quarter', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T)
+
+gbarplot(figdata, variable = 'quarter', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,stacked = F)
+
+
+Urval<- subset(Pso_contact, ContactDate > as.Date("2014-12-30") & ContactDate < as.Date("2016-01-01"))
+
+```
+
