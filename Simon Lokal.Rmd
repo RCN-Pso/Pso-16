@@ -161,33 +161,7 @@ points(2006,sum(as.vector(artab[1:1,2])),pch = 20,col="firebrick1")
 
 ```
 
-```{r utfallsM_arsrapport, echo=FALSE}
-
-# Test med medelvärde på PASI mot klinik, inte jättebra staplar ännu...
-A21=as.data.frame(colMeans(as.matrix(table((Pso_contact$PASI_index),Pso_contact$Sjukhus))))
-A22=as.vector(A21)
-PASI=as.vector(A22$`colMeans(as.matrix(table(Pso_contact$PASI_index, Pso_contact$Sjukhus)))`)
-Sjukhus=rownames(A21)
-testData=data.frame(Sjukhus,PASI)
-testData$n=round(PASI*100,digits = 2)
-
-
-
-figdata <- testData %>% select(Sjukhus, PASI,n) %>% 
-      mutate(quarter = cut(PASI, breaks = c(-0.01,1.5,5,8,20), labels = c('Q1','Q2','Q3','Q4'))) %>% 
-      group_by(Sjukhus, quarter) %>% data.frame()
-
-
-gbarplot(figdata, variable = 'quarter', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T)
-
-gbarplot(figdata, variable = 'quarter', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,stacked = F)
-
-
-
-
-```
-
-```{r utfallsM_arsrapport2, echo=FALSE}
+```{r AntalPatinter_arsrapport, echo=FALSE}
 ######## Antal patinter per kvartal
 
 Pso_contact1=Pso_contact
@@ -200,17 +174,93 @@ Pso_contact1$unikaPNR <- duplicated(Pso_contact1$PERSNR)
 Pso_contact1=subset(Pso_contact1,Pso_contact1$unikaPNR==FALSE)
 dim(Pso_contact1)
 
-figdata <- Pso_contact1 %>% select(Sjukhus, monad) %>% 
-      mutate(quarter = cut(monad, breaks = c(0,3,6,9,12), labels = c('Q1','Q2','Q3','Q4'))) %>% 
-      group_by(Sjukhus, quarter) %>%
+
+figdata <- Pso_contact1 %>% select(Sjukhus, Kön) %>% 
+      mutate(Gender = cut(Kön, breaks = c(0,1,2), labels = c('Man','Kvinna'))) %>% 
+      group_by(Sjukhus, Gender) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'quarter', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T)
+gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,addCI=F,sizelimit=2)#kolla upp vad som är man resp kvinna
 
-gbarplot(figdata, variable = 'quarter', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,stacked = F)
+#gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,stacked = F,addCI=F)
+
+#gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = F,stacked = F)
+
+#gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = F,stacked = T)
 
 
-Urval<- subset(Pso_contact, ContactDate > as.Date("2014-12-30") & ContactDate < as.Date("2016-01-01"))
 
 ```
 
+
+```{r utfallsM_arsrapport, echo=FALSE}
+
+#PASI_index
+
+figdata <- Pso_contact1 %>% select(Sjukhus, PASI_index)
+  
+figtitle = 'PASI INDEX'
+
+gdotplot(figdata, variable = 'PASI_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = T)
+
+gdotplot(figdata, variable = 'PASI_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = T, whitelines = F)
+
+gdotplot(figdata, variable = 'PASI_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
+
+#DLQI_index
+figdata <- Pso_contact1 %>% select(Sjukhus, DLQI_index)
+  
+figtitle = 'DLQI INDEX'
+
+gdotplot(figdata, variable = 'DLQI_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = T)
+
+gdotplot(figdata, variable = 'DLQI_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = T, whitelines = F)
+
+gdotplot(figdata, variable = 'DLQI_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
+
+
+
+#EQ5D_index
+
+figdata <- Pso_contact1 %>% select(Sjukhus, EQ5D_index)
+  
+figtitle = 'EQ5D INDEX'
+
+gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = T)
+
+gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = T, whitelines = F)
+
+gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
+
+
+```
+
+```{r rokare, echo=FALSE}
+Pso_contact1$Smoker_Numb=as.character(Pso_contact1$Smoker_Beskrivning)
+Pso_contact1$Smoker_Numb[Pso_contact1$Smoker_Numb=="Ja, röker"]<- 1
+Pso_contact1$Smoker_Numb[Pso_contact1$Smoker_Numb=="Har slutat röka"]<-2
+Pso_contact1$Smoker_Numb[Pso_contact1$Smoker_Numb=="Nej"]<-3
+Pso_contact1$Smoker_Numb=as.numeric(Pso_contact1$Smoker_Numb)
+
+figdata <- Pso_contact1 %>% select(Sjukhus, Smoker_Numb) %>% 
+      mutate(Smoke = cut(Smoker_Numb, breaks = c(0,1,2,3), labels = c('Ja','Slutat','Nej'))) %>% 
+      group_by(Sjukhus, Smoke) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'Smoke', sjukhus = 'Sjukhus', main = "Andel rökare",percent = T,addCI=F,sizelimit=2)#kolla upp vad som är man resp kvinna
+```
+
+
+
+
+
+head(Pso_contact1)
