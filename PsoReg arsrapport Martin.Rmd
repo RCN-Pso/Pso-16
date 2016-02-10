@@ -2,7 +2,7 @@
 title: "PsoReg arsrapport Martin 2016"
 author: "martin"
 date: "18 januari 2016"
-output: html_document
+output: word_document
 ---
 ```{r databearbetningar1, echo=FALSE}
 
@@ -11,6 +11,9 @@ library(reshape)
 
 library(knitr)
 library(stringr)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
 #library(data.table)
 
 #Läser in data med kontakter från PsoReg
@@ -41,9 +44,11 @@ Pso_contact$Registred_year <- 1900 + as.POSIXlt(Pso_contact$REGDATUM)$year
 Pso_contact$Registred_moth <-1 + as.POSIXlt(Pso_contact$REGDATUM)$mon
 Pso_contact$Registred_year_moth <- paste(as.character(Pso_contact$Registred_year),as.character(Pso_contact$Registred_moth),sep ="")
 
+Pso_contact$PERSNR <- gsub("[^0-9]", "", Pso_contact$PERSNR) 
+
 #Skapar dataset med den senaste kontakten per individ
 Pso_individ<-subset(Pso_contact,dupli_PatientID==FALSE)
-###############
+  ###############
 
 
 
@@ -74,15 +79,15 @@ Pso_behandling <- subset(Pso_behandling, InsertDate<"2016-01-01")
 
 #Lite småfix
 Pso_behandling$DrugName <- as.character(Pso_behandling$DrugName)
-Pso_behandling$DrugName[Pso_behandling$DrugName=="Metotrexat (injektion)"] <- "Metotrexat"
-Pso_behandling$DrugName[Pso_behandling$DrugName=="Metotrexat (tablett)"] <- "Metotrexat"
+Pso_behandling$DrugName[Pso_behandling$DrugName=="Metotrexat (injektion)"] <- "MTX"
+Pso_behandling$DrugName[Pso_behandling$DrugName=="Metotrexat (tablett)"] <- "MTX"
 Pso_behandling$DrugName[Pso_behandling$DrugName=="PUVA (tablett)"] <- "PUVA"
 Pso_behandling$DrugName[Pso_behandling$DrugName=="PUVA (bad, TMP)"] <- "PUVA"
 Pso_behandling$RemoveDate <- as.character(Pso_behandling$RemoveDate)
 
 
 ###Skapar dataset med endast Metotrexatbehandlingar
-Pso_mtx <- Pso_behandling[Pso_behandling$DrugName==c("Metotrexat"),]
+Pso_mtx <- Pso_behandling[Pso_behandling$DrugName==c("MTX"),]
 ## Sätter ett datum på Removedate på de behandlingar som inte än är utskrivna 
 Pso_mtx$RemoveDate[Pso_mtx$RemoveDate==""] <- "2018-06-25"
 
@@ -94,6 +99,25 @@ Pso_bio <- Pso_biologisk[order(Pso_biologisk$InsertDate,decreasing=TRUE),]
 Pso_bio <- Pso_bio[order(Pso_bio$PERSNR,decreasing=FALSE),]
 Pso_bio$dupli_PatientID <- duplicated(Pso_bio$PERSNR)
 Pso_bio<-subset(Pso_bio,dupli_PatientID==FALSE)
+
+###
+
+##Skapar dataset med andast aktiva systembehandlingar
+Aktiva_behandlingar <-  subset(Pso_behandling,is.na(Pso_behandling$RemoveDate)=="TRUE")
+Aktiva_behandlingar$DrugName <- as.factor(Aktiva_behandlingar$DrugName)
+
+
+### Lägger till en variabel som anger om patienten är biologisk patient till dataramen ##Pso_individ
+
+Pso_tmp1 <- subset(Aktiva_behandlingar, biologisk!="")
+Pso_tmp1 <- Pso_tmp1[order(Pso_tmp1$biologisk),]
+Pso_tmp1 <- Pso_tmp1[order(Pso_tmp1$PERSNR),]
+Pso_tmp1$dupli <- duplicated(Pso_tmp1$PERSNR)
+Pso_tmp1 <- subset(Pso_tmp1, dupli==FALSE)
+
+mergdata <- data.frame(PERSNR=Pso_tmp1$PERSNR,aktiv_biologisk=Pso_tmp1$biologisk)
+
+Pso_individ <- merge(Pso_individ, mergdata,all.x=TRUE, by.x="PERSNR", by.y="PERSNR")
 
 ```
 
@@ -128,9 +152,7 @@ kable(tab_patienter)
 ```{r stapel_systembehandlingar, echo=FALSE}
 #names(df) <- c("RemoveDate", "Treatment", "Hospcode", "Sjukhuskod", "Sjukhusnamn", "sjukhusnamn_miljo","Regbehor")
 
-Aktiva_behandlingar <-  subset(Pso_behandling,is.na(Pso_behandling$RemoveDate)=="TRUE")
 
-Aktiva_behandlingar$DrugName <- as.factor(Aktiva_behandlingar$DrugName)
 
 #plot1 <- table(Aktiva_behandlingar[,2])
 #plot1 <-  rbind(table(Aktiva_behandlingar$Treatment)/sum(table(Aktiva_behandlingar$Treatment))*100, 
@@ -277,37 +299,37 @@ dat_sjuk <- dat_sjuk[,-2]
 
 dats <- merge(sys3,dat_sjuk,by.x="PNR",by.y="PERSNR")
 
-dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabMetotrexat"] <- "Adalimumab:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabMTX"] <- "Adalimumab:MTX"
 
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabEtanercept"] <- "Adalimumab:Etanercept"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="EtanerceptMetotrexat"] <- "Etanercept:Metotrexat"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="InfliximabMetotrexat"] <- "Infliximab:Metotrexat"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="Metotrexat1"] <- "Ustekinumab:Metotrexat"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinMetotrexat"] <- "Acitretin:Metotrexat"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="CiklosporinMetotrexat"] <- "Ciklosporin:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="EtanerceptMTX"] <- "Etanercept:MTX"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="InfliximabMTX"] <- "Infliximab:MTX"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="MTX1"] <- "Ustekinumab:MTX"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinMTX"] <- "Acitretin:MTX"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="CiklosporinMTX"] <- "Ciklosporin:MTX"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinEtanercept"] <- "Acitretin:Etanercept"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="Acitretin1"] <- "Acitretin:Ustekinumab"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinAdalimumab"] <- "Acitretin:Adalimumab"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinPUVA"] <- "Acitretin:PUVA"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="Infliximab1"] <- "Infliximab:Ustekinumab"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="MetotrexatPUVA"] <-  "PUVA:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="MTXPUVA"] <-  "PUVA:MTX"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinAlitretinoin"] <- "Acitretin:Alitretinoin"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinCiklosporin"] <- "Acitretin:Ciklosporin"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinEfalizumab"] <- "Acitretin:Efalizumab"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinMetotrexat1"] <- "Acitretin:Metotrexat:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinMTX1"] <- "Acitretin:MTX:Ustekinumab"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="Adalimumab1"] <- "Adalimumab:Ustekinumab"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabEtanercept1"] <- "Adalimumab:Etanercept:Metotrexat"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabInfliximabMetotrexat"] <- "Adalimumab:Infliximab:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabEtanercept1"] <- "Adalimumab:Etanercept:MTX"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabInfliximabMTX"] <- "Adalimumab:Infliximab:MTX"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabPUVA"] <- "Adalimumab:PUVA"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="CiklosporinEtanercept"] <- "Ciklosporin:Etanercept"
 
 
 dats$kombi_läkemedel[dats$kombi_läkemedel=="Etanercept1"] <- "Etanercept:Ustekinumab"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="EtanerceptMetotrexat1"] <- "EtanerceptMetotrexat:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="EtanerceptMTX1"] <- "EtanerceptMTX:Ustekinumab"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="Fumaderm1"] <- "Fumaderm:Ustekinumab"
-dats$kombi_läkemedel[dats$kombi_läkemedel=="InfliximabMetotrexat1"] <- "InfliximabMetotrexat:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="InfliximabMTX1"] <- "InfliximabMTX:Ustekinumab"
 
-dats$kombi_läkemedel[dats$kombi_läkemedel=="MetotrexatUstekinumab"] <- "Metotrexat:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="MTXUstekinumab"] <- "MTX:Ustekinumab"
 dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinUstekinumab"] <- "Acitretin:Ustekinumab"
 #######
 tabl <- table(dats$kombi_läkemedel)
@@ -327,6 +349,43 @@ text(tabl,bar1,tabl,cex=0.8,pos=4)
 
 Pso_beh_2011 <- subset(Pso_behandling, InsertDate< "2012-01-01")
 Pso_beh_2011 <- subset(Pso_beh_2011, RemoveDate> "2011-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2011$År_behandling <- rep(2011, nrow(Pso_beh_2011))
+
+Pso_beh_2012 <- subset(Pso_behandling, InsertDate< "2013-01-01")
+Pso_beh_2012 <- subset(Pso_beh_2011, RemoveDate> "2012-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2012$År_behandling <- rep(2012, nrow(Pso_beh_2012))
+
+Pso_beh_2013 <- subset(Pso_behandling, InsertDate< "2014-01-01")
+Pso_beh_2013 <- subset(Pso_beh_2011, RemoveDate> "2013-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2013$År_behandling <- rep(2013, nrow(Pso_beh_2013))
+
+Pso_beh_2014 <- subset(Pso_behandling, InsertDate< "2015-01-01")
+Pso_beh_2014 <- subset(Pso_beh_2011, RemoveDate> "2014-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2014$År_behandling <- rep(2014, nrow(Pso_beh_2014))
+
+Pso_beh_2015 <- subset(Pso_behandling, InsertDate< "2016-01-01")
+Pso_beh_2015 <- subset(Pso_beh_2011, RemoveDate> "2015-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2015$År_behandling <- rep(2015, nrow(Pso_beh_2015))
+
+
+Pso_linjegrafdata <- rbind(Pso_beh_2011, Pso_beh_2012, Pso_beh_2013, Pso_beh_2014, Pso_beh_2015)
+
+
+linjegrafdata_bio <- subset(Pso_linjegrafdata, biologisk=="Ja")
+Pso_linjegrafdata <- subset(Pso_linjegrafdata, biologisk=="Ja")
+
+data_plot <-  Pso_linjegrafdata %>% group_by(År_behandling, DrugName) %>% 
+        summarise(antal = n()) %>% 
+        group_by(year = År_behandling) %>% 
+        mutate(ntot = sum(antal), p = antal/ntot)
+
+data_plot <- as.data.frame(data_plot)
+
+
+
+ggplot(data=data_plot ,aes(x = År_behandling, y = p, color = DrugName))  + theme_minimal() + geom_line(lwd = 1)
+
 
 ```
+
 
