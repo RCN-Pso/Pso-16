@@ -54,6 +54,7 @@ Pso_contact$Ålder_kategori <- cut(Pso_contact$Ålder, breaks = c(10,30,45,60,75
 Pso_contact$Ålder_kategori2 <- cut(Pso_contact$Ålder, breaks = c(0,14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, 69, 74, 79, 84, 89, 94),labels=FALSE)
 Pso_contact$Ålder_kategori2 <-as.factor(Pso_contact$Ålder_kategori2)
 
+Pso_contact$BMI_kategori <- cut(Pso_contact$BMI, breaks = c(0,18.49999,24.99999,29.99999,100),labels=c("Undervikt","Normalvikt", "Övervikt", "Fetma"))
 
 
 #Skapar dataset med den senaste kontakten per individ
