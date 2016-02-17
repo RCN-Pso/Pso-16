@@ -13,6 +13,17 @@ library(data.table)
 library(dplyr)
 ```
 
+```{r colours, echo=FALSE, cache=TRUE}
+
+t6_4#eff3ff
+#bdd7e7
+#6baed6
+#2171b5
+t6_3<- c('#deebf7', '#9ecae1','#3182bd')
+t6_2<-c('#deebf7', '#3182bd')
+t6_1<-c('#3182bd')
+```
+
 ```{r databearbetningar1, echo=FALSE, cache=TRUE}
 #setwd("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/Pso årsrapport 2016/Pso-16")
 # setwd("C:/WD/PsoReg/PsoReg/")
@@ -141,7 +152,7 @@ artab <- Sort %>% group_by(ar) %>% summarise(n = n())
 
 par(mfcol=c(1,1))
 
-plot(artab$ar, cumsum(artab$n), type = 'l',xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2",xlim=c(2005.7,as.integer(max(artab$ar))+0.3),ylim=c(0,sum(artab$n)*1.05),yaxs="i",xaxs="i",xaxt="n")
+plot(artab$ar, cumsum(artab$n), type = 'l',xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col=t7_1,xlim=c(2005.7,as.integer(max(artab$ar))+0.3),ylim=c(0,sum(artab$n)*1.05),yaxs="i",xaxs="i",xaxt="n")
 
 axis(1, at = seq(2006, as.integer(max(artab$ar)), by = 1), las=2)
 
@@ -180,7 +191,8 @@ figdata <- Pso_contact1 %>% select(Sjukhus, Kön) %>%
       group_by(Sjukhus, Gender) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,addCI=F,sizelimit=2)#kolla upp vad som är man resp kvinna
+plotcols <- t2_2
+gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,addCI=F,sizelimit=10,plotcolors = t7_2)#kolla upp vad som är man resp kvinna
 
 #gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,stacked = F,addCI=F)
 
@@ -251,16 +263,52 @@ Pso_contact1$Smoker_Numb[Pso_contact1$Smoker_Numb=="Har slutat röka"]<-2
 Pso_contact1$Smoker_Numb[Pso_contact1$Smoker_Numb=="Nej"]<-3
 Pso_contact1$Smoker_Numb=as.numeric(Pso_contact1$Smoker_Numb)
 
-figdata <- Pso_contact1 %>% select(Sjukhus, Smoker_Numb) %>% 
+figdata <- Pso_contact1 %>% select(Sjukhus, Smoker_Numb) %>% filter(!is.na(Smoker_Numb)) %>% 
       mutate(Smoke = cut(Smoker_Numb, breaks = c(0,1,2,3), labels = c('Ja','Slutat','Nej'))) %>% 
       group_by(Sjukhus, Smoke) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'Smoke', sjukhus = 'Sjukhus', main = "Andel rökare",percent = T,addCI=F,sizelimit=2)#kolla upp vad som är man resp kvinna
+plotcols <- t2_3
+
+gbarplot(figdata, variable = 'Smoke', sjukhus = 'Sjukhus', main = "Andel rökare",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3) #kolla upp vad som är man resp kvinna
+
 ```
 
+```{r biolog_vs_konvet, echo=FALSE}
+head(subset(Pso_behandling,biologisk=="Ja"))
+
+Pso_behandling1=Pso_behandling
+Pso_behandling1$ar=format(as.Date(Pso_behandling1$InsertDate), "%Y")
+Pso_behandling1=subset(Pso_behandling1,ar==2015)
+
+Pso_behandling1= Pso_behandling1[with(Pso_behandling1, order(as.Date(Pso_behandling1$InsertDate), Pso_behandling1$PERSNR)), ]  #sorterar patient enligt kont.datum & PNR  
+Pso_behandling1$unikaPNR <- duplicated(Pso_behandling1$PERSNR)
+Pso_behandling1=subset(Pso_behandling1,Pso_behandling1$unikaPNR==FALSE)
+dim(Pso_behandling1)
+ 
+
+Pso_contact1$biologisk=Pso_behandling$biologisk
 
 
 
 
-head(Pso_contact1)
+figdata <- Pso_contact1 %>% select(Sjukhus, Kön, biologisk) %>% 
+      filter(biologisk != 'Nej') %>% 
+      mutate(Gender = cut(Kön, breaks = c(0,1,2), labels = c('Man','Kvinna')),
+             stdairport = origin == 'Nej',
+             Sjukhus = factor(Sjukhus))
+
+figtitle = 'Flights per quarter\n and Carrier'
+
+ggpyramid_std(figdata, sjukhus_name = 'carrier',variable_name = 'quarter',
+              stdpat_name = 'stdairport',
+              legendrows = 2, main = figtitle)
+
+
+figdata <- Pso_contact1 %>% select(Sjukhus, Kön) %>% 
+      mutate(Gender = cut(Kön, breaks = c(0,1,2), labels = c('Man','Kvinna'))) %>% 
+      group_by(Sjukhus, Gender) %>%
+      summarise(n = n()) %>% data.frame()
+
+```
+
