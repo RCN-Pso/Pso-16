@@ -1,22 +1,61 @@
 ---
 title: "PsoReg årsrapport 2016"
-author: "martin"
-date: "18 januari 2016"
-output: word_document
+author: "Martin"
+date: '`r Sys.Date()`'
+output: html_document
 ---
-```{r databearbetningar1, echo=FALSE}
-#setwd("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/Pso årsrapport 2016/Pso-16")
-setwd("C:/WD/PsoReg/PsoReg/")
 
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, fig.height=8, fig.width=8)
+```
+
+```{r librarys, warning=FALSE, message = FALSE}
 library(knitr)
 library(stringr)
-#library(data.table)
+library(GynopTools)
+library(data.table)
+library(dplyr)
+library(reshape)
+library(grid)
+library(RColorBrewer)
+library(ggplot2)
+library(tidyr)
+library(pyramid)
+
+'%ni%' = Negate('%in%')
+
+library(RCurl)
+library(httr)
+set_config( config( ssl_verifypeer = 0L ) )
+
+```
+
+```{r colours, echo=FALSE, cache=TRUE}
+
+
+t7_4<- c('#ffffcc', '#c2e699','#78c679','#238443')
+t7_3<- c('#f7fcb9','#addd8e','#31a354')
+t7_2<-c('#31a354', '#f7fcb9')
+t7_1<-c('#31a354')
+
+tm_1.1 <- "#edf8b1"
+tm_1.2 <- "#2c7fb8"
+```
+
+```{r databearbetningar1, echo=FALSE, cache=TRUE}
+#setwd("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/Pso årsrapport 2016/Pso-16")
+# setwd("C:/WD/PsoReg/PsoReg/")
+
+
 
 #Läser in data med kontakter från PsoReg
-Pso_contact <- read.delim("Kontaktnivå 20160118.txt",header=TRUE,sep="\t",encoding="UTF-8", dec=",")
+Pso_contact <- read.delim(file="H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/data för PsoReg årsrapport 16/Kontaktnivå 20160224.txt",header=TRUE,sep="\t",encoding="UTF-8", dec=",")
+
 
 #namnger variablerna ändra datatyper, plockar bort testpatienter och plockar bort kontakter utan kontaktdatum och kontakter efter 2015-12-31
 names(Pso_contact)[1:9]<- c("PERSNR","Pnyckel_contact","Pnyckel_root","Fnyckel_contact","PAT_ID","Kön","Aktiv_patient", "Sjukhus","ContactDate")
+names(Pso_contact)[40]<- c("Sjukhus_ny")
 Pso_contact$Sjukhus <- as.character(Pso_contact$Sjukhus)
 Pso_contact <- Pso_contact[!(Pso_contact$Sjukhus=="Test") ,]
 Pso_contact$ContactDate <- as.Date(Pso_contact$ContactDate)
@@ -24,8 +63,8 @@ Pso_contact <- subset(Pso_contact, is.na(ContactDate)==FALSE)
 Pso_contact <- subset(Pso_contact, ContactDate<"2016-01-01")
 
 
-#Sorterar datat och skapar en variabel som indikerar de unika individerna dupli_PatientID=FALSE=första kontakten per individ
-Pso_contact <- Pso_contact[order(Pso_contact$ContactDate,decreasing=FALSE),]
+#Sorterar datat och skapar en variabel som indikerar de unika individerna dupli_PatientID=FALSE=Sista kontakten per individ
+Pso_contact <- Pso_contact[order(Pso_contact$ContactDate,decreasing=T),]
 Pso_contact <- Pso_contact[order(Pso_contact$PERSNR,decreasing=FALSE),]
 Pso_contact$dupli_PatientID <- duplicated(Pso_contact$PERSNR)
 
@@ -40,20 +79,34 @@ Pso_contact$Registred_year <- 1900 + as.POSIXlt(Pso_contact$REGDATUM)$year
 Pso_contact$Registred_moth <-1 + as.POSIXlt(Pso_contact$REGDATUM)$mon
 Pso_contact$Registred_year_moth <- paste(as.character(Pso_contact$Registred_year),as.character(Pso_contact$Registred_moth),sep ="")
 
+Pso_contact$PERSNR <- gsub("[^0-9]", "", Pso_contact$PERSNR) 
+
+Pso_contact$Kon_value=Pso_contact$Kön
+Pso_contact$Kön <-ifelse(Pso_contact$Kön==1,"Man" , "Kvinna")
+Pso_contact$Ålder <- 2015-as.numeric(substr(Pso_contact$PERSNR,1,4))
+Pso_contact$Ålder_kategori <- cut(Pso_contact$Ålder, breaks = c(10,30,45,60,75,120), right = FALSE)
+
+Pso_contact$Ålder_kategori2 <- cut(Pso_contact$Ålder, breaks = c(0,14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, 69, 74, 79, 84, 89, 94),labels=FALSE)
+Pso_contact$Ålder_kategori2 <-as.factor(Pso_contact$Ålder_kategori2)
+
+Pso_contact$BMI_kategori <- cut(Pso_contact$BMI, breaks = c(0,18.49999,24.99999,29.99999,100),labels=c("Undervikt","Normalvikt", "Övervikt", "Fetma"))
+
 #Skapar dataset med den senaste kontakten per individ
 Pso_individ<-subset(Pso_contact,dupli_PatientID==FALSE)
 ###############
 
 
 
-```
 
+
+
+```
 
 ```{r databearbetningar 2, echo=FALSE}
 #####Läser in fil med systembehandlingar#####
 
 #Läser in data med PsoReg data för att skapa dataset med behandlingar
-Pso_behandling <- read.csv("Systembehandlingar 20160118.txt",header=TRUE,sep="\t",encoding="UTF-8")
+Pso_behandling <- read.csv("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/data för PsoReg årsrapport 16/Systembehandlingar 20160224.txt",header=TRUE,sep="\t",encoding="UTF-8")
 names(Pso_behandling) <- c("PERSNR", "Pnyckel_systemictreat", "Fnyckel_systemictreat","Sjukhus", "InsertDate", "RemoveDate", "DrugName","biologisk","Aktiv_patient")
 Pso_behandling <- Pso_behandling[!(Pso_behandling$Sjukhus=="Test") ,]
 #Pso_behandling <- Pso_behandling[as.numeric(substr(Pso_behandling$X.U.FEFF.PERSNR,1,8))>19130101,]
@@ -76,13 +129,18 @@ Pso_behandling$DrugName <- as.character(Pso_behandling$DrugName)
 Pso_behandling$DrugName[Pso_behandling$DrugName=="Metotrexat (injektion)"] <- "Metotrexat"
 Pso_behandling$DrugName[Pso_behandling$DrugName=="Metotrexat (tablett)"] <- "Metotrexat"
 Pso_behandling$DrugName[Pso_behandling$DrugName=="PUVA (tablett)"] <- "PUVA"
+Pso_behandling$DrugName[Pso_behandling$DrugName=="PUVA (bad, TMP)"] <- "PUVA"
 Pso_behandling$RemoveDate <- as.character(Pso_behandling$RemoveDate)
 
 
+Pso_behandling$DrugName <- factor(Pso_behandling$DrugName)
+Pso_behandling$DrugName <- factor(Pso_behandling$DrugName,levels(Pso_behandling$DrugName)[c(12,1,4,6,13,9,15,3,5,10,8,2,11,16,14,7)])
+
+
 ###Skapar dataset med endast Metotrexatbehandlingar
-Pso_mtx <- Pso_behandling[Pso_behandling$DrugName==c("Metotrexat"),]
+Pso_Metotrexat <- Pso_behandling[Pso_behandling$DrugName==c("Metotrexat"),]
 ## Sätter ett datum på Removedate på de behandlingar som inte än är utskrivna 
-Pso_mtx$RemoveDate[Pso_mtx$RemoveDate==""] <- "2018-06-25"
+Pso_Metotrexat$RemoveDate[Pso_Metotrexat$RemoveDate==""] <- "2018-06-25"
 
 ##Skapar ett dataset med endast biologiska behandlingar
 Pso_biologisk <- subset(Pso_behandling, biologisk="Ja")
@@ -92,6 +150,30 @@ Pso_bio <- Pso_biologisk[order(Pso_biologisk$InsertDate,decreasing=TRUE),]
 Pso_bio <- Pso_bio[order(Pso_bio$PERSNR,decreasing=FALSE),]
 Pso_bio$dupli_PatientID <- duplicated(Pso_bio$PERSNR)
 Pso_bio<-subset(Pso_bio,dupli_PatientID==FALSE)
+
+###
+
+##Skapar dataset med andast aktiva systembehandlingar
+Aktiva_behandlingar <-  subset(Pso_behandling,is.na(Pso_behandling$RemoveDate)=="TRUE")
+Aktiva_behandlingar$DrugName <- as.factor(Aktiva_behandlingar$DrugName)
+
+
+### Lägger till en variabel som anger om patienten är biologisk patient till dataramen ##Pso_individ
+
+Pso_tmp1 <- subset(Aktiva_behandlingar, biologisk!="")
+Pso_tmp1 <- Pso_tmp1[order(Pso_tmp1$biologisk),]
+Pso_tmp1 <- Pso_tmp1[order(Pso_tmp1$PERSNR),]
+Pso_tmp1$dupli <- duplicated(Pso_tmp1$PERSNR)
+Pso_tmp1 <- subset(Pso_tmp1, dupli==FALSE)
+
+mergdata <- data.frame(PERSNR=Pso_tmp1$PERSNR,aktiv_biologisk=Pso_tmp1$biologisk)
+
+Pso_individ <- merge(Pso_individ, mergdata,all.x=TRUE, by.x="PERSNR", by.y="PERSNR")
+
+Pso_individ_2015 <- subset(Pso_individ,Contact_year==2015)
+
+Pso_bio <- subset(Pso_individ_2015, aktiv_biologisk=="Ja")
+Pso_kon <- subset(Pso_individ_2015, aktiv_biologisk=="Nej")
 
 ```
 
@@ -112,6 +194,8 @@ Pso_contact$BMI <- Pso_contact$Weight/(Pso_contact$Height/100)^2
 ```
 
 
+# Anslutning
+
 ```{r tabell_patientantal, echo=FALSE}
 
 tab_patienter <- sort(table(Pso_individ$Sjukhus), decreasing=TRUE)
@@ -121,6 +205,10 @@ tab_patienter <- as.data.frame(tab_patienter)
 kable(tab_patienter)
 ```
 
+*Tabell 1: Antal patienter i PsoReg vid årsskifte 2015/2016*
+
+
+# Patientregistrering över tid
 ```{r antal_pat_arsrapport, echo=FALSE}
 
 Sort= Pso_contact[with(Pso_contact, order(as.Date(Pso_contact$ContactDate), Pso_contact$PERSNR)), ]  #sorterar patient enligt reg.datum och  
@@ -133,16 +221,19 @@ Sort=Sort[-c(1,2),]
 artab <- Sort %>% group_by(ar) %>% summarise(n = n())
 
 par(mfcol=c(1,1))
-plot(artab$ar, cumsum(artab$n), type = 'l',xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col="dodgerblue2",xlim=c(2005.8,2015.3),ylim=c(0,5400),yaxs="i",xaxs="i",xaxt="n")
-axis(1, at = seq(2006, 2015, by = 1), las=2)
-lines(x=c(2005.8,2015.3),y=c(1000,1000),lty = 2, col ="gray") #genererar grids
-lines(x=c(2005.8,2015.3),y=c(2000,2000),lty = 2, col ="gray")
-lines(x=c(2005.8,2015.3),y=c(3000,3000),lty = 2, col ="gray")
-lines(x=c(2005.8,2015.3),y=c(4000,4000),lty = 2, col ="gray")
-lines(x=c(2005.8,2015.3),y=c(5000,5000),lty = 2, col ="gray")
+
+plot(artab$ar, cumsum(artab$n), type = 'l',xlab="År",ylab="Antal registrerade patienter",lty=c(1,1),lwd=c(3,3),col=t7_1,xlim=c(2005.7,as.integer(max(artab$ar))+0.3),ylim=c(0,sum(artab$n)*1.05),yaxs="i",xaxs="i",xaxt="n")
+
+axis(1, at = seq(2006, as.integer(max(artab$ar)), by = 1), las=2)
+
+lines(x=c(as.integer(min(artab$ar))-0.3,as.integer(max(artab$ar))+0.3),y=c(1000,1000),lty = 2, col ="gray") 
+lines(x=c(as.integer(min(artab$ar))-0.3,as.integer(max(artab$ar))+0.3),y=c(2000,2000),lty = 2, col ="gray")
+lines(x=c(as.integer(min(artab$ar))-0.3,as.integer(max(artab$ar))+0.3),y=c(3000,3000),lty = 2, col ="gray")
+lines(x=c(as.integer(min(artab$ar))-0.3,as.integer(max(artab$ar))+0.3),y=c(4000,4000),lty = 2, col ="gray")
+lines(x=c(as.integer(min(artab$ar))-0.3,as.integer(max(artab$ar))+0.3),y=c(5000,5000),lty = 2, col ="gray")
 
 # lägger in punkter och akumulerat antal patienter för varje år
-for (i in 2:10) {                                             
+for (i in 2:length(artab$ar)) {                                             
   points(2005+i,sum(as.vector(artab[1:i,2])),pch = 20,col="firebrick1")
   text(2005+i-0.13,sum(as.vector(artab[1:i,2]))+180,sum(as.vector(artab[1:i,2])))
   }
@@ -151,26 +242,223 @@ points(2006,sum(as.vector(artab[1:1,2])),pch = 20,col="firebrick1")
 
 ```
 
+```{r stapel_systembehandlingar, echo=FALSE, fig.width=10, fig.height=11}
+#names(df) <- c("RemoveDate", "Treatment", "Hospcode", "Sjukhuskod", "Sjukhusnamn", "sjukhusnamn_miljo","Regbehor")
+
+
+
+#plot1 <- table(Aktiva_behandlingar[,2])
+#plot1 <-  rbind(table(Aktiva_behandlingar$Treatment)/sum(table(Aktiva_behandlingar$Treatment))*100, 
+#table(klin_aktiva_behandlingar$Treatment)/sum(table(klin_aktiva_behandlingar$Treatment))*100)
+
+Systembehandling <- Aktiva_behandlingar$DrugName
+
+plot1 <- table(Systembehandling)/sum(table(Systembehandling))*100
+
+antal <- paste(table(Systembehandling),"\n(",round(as.numeric(plot1)),"%",")",sep="")
+
+col_stapel <- c(rep(tm_1.1,9),rep(tm_1.2,7))
+
+par(mar=c(11.1, 4.1 , 4.1 , 1.1),cex=1.2)
+bar1 <- barplot(plot1,ylab="Andel pågående Systembehandlingar (%)",las=2,col=col_stapel,ylim=c(0,max(plot1)*1.2),space=c(0,0.5))
+
+text(bar1, plot1, antal,cex=1,pos=3)
+
+
+#legend("topright","groups",ncol=1,c("Riket",print(klin_aktiva_behandlingar$sjukhusnamn_miljo[1])),
+ #      fill=c("cadetblue","goldenrod3"),cex=1)
+
+```
+
+```{r stapel_kombinationsbehandlingar, echo=FALSE, eval=TRUE,fig.width=7, fig.height=9}
+
+sys <- Aktiva_behandlingar
+sys$DrugName <- as.character(sys$DrugName)
+sys$PERSNR <- factor(sys$PERSNR)
+sys <- subset(sys, is.na(DrugName)==FALSE)
+sys$indikator <-  rep(1,nrow(sys))
+
+
+
+mean2 <- function(x){
+        mean(x,na.rm=TRUE)
+}
+
+
+sys2 <- cast(sys, PERSNR ~ DrugName,value="indikator", fun.aggregate=mean2)
+
+sys2 <- as.data.frame(sys2)
+
+sys3 <- unstack(within(stack(sys2), values[is.nan(values)] <- 0))
+
+sys3$PNR <- sys2$PERSNR
+
+
+
+ant <- ncol(sys3)-1
+sys3$antal_läkemedel <- rowSums(sys3[,1:ant])
+
+
+sys3$Acitretin..Neotigason. <- as.character(sys3$Acitretin..Neotigason.)
+sys3$Acitretin..Neotigason.[sys3$Acitretin..Neotigason.=="1"] <- "Acitretin"
+
+sys3$Adalimumab..Humira. <- as.character(sys3$Adalimumab..Humira.)
+sys3$Adalimumab..Humira.[sys3$Adalimumab..Humira.=="1"] <- "Adalimumab"
+
+sys3$Acitretin..Neotigason. <- as.character(sys3$Acitretin..Neotigason.)
+sys3$Acitretin..Neotigason.[sys3$Acitretin..Neotigason.=="1"] <- "Acitretin (Neotigason)"
+
+sys3$Alitretinoin..Toctino. <- as.character(sys3$Alitretinoin..Toctino.)
+sys3$Alitretinoin..Toctino.[sys3$Alitretinoin..Toctino.=="1"] <- "Alitretinoin"
+
+sys3$Ciklosporin..Sandimmum. <- as.character(sys3$Ciklosporin..Sandimmum.)
+sys3$Ciklosporin..Sandimmum.[sys3$Ciklosporin..Sandimmum.=="1"] <- "Ciklosporin"
+
+sys3$Efalizumab..Raptiva. <- as.character(sys3$Efalizumab..Raptiva.)
+sys3$Efalizumab..Raptiva.[sys3$Efalizumab..Raptiva.=="1"] <- "Efalizumab"
+
+sys3$Etanercept..Enbrel. <- as.character(sys3$Etanercept..Enbrel.)
+sys3$Etanercept..Enbrel.[sys3$Etanercept..Enbrel.=="1"] <- "Etanercept"
+
+sys3$Fumaderm..Fumarsyra. <- as.character(sys3$Fumaderm..Fumarsyra.)
+sys3$Fumaderm..Fumarsyra.[sys3$Fumaderm..Fumarsyra.=="1"] <- "Fumaderm"
+
+sys3$Infliximab..Remicade. <- as.character(sys3$Infliximab..Remicade.)
+sys3$Infliximab..Remicade.[sys3$Infliximab..Remicade.=="1"] <- "Infliximab"
+
+sys3$Metotrexat <- as.character(sys3$Metotrexat)
+sys3$Metotrexat[sys3$Metotrexat=="1"] <- "Metotrexat"
+
+sys3$PUVA <- as.character(sys3$PUVA)
+sys3$PUVA[sys3$PUVA=="1"] <- "PUVA"
+
+sys3$Tioguanin..Lanvis. <- as.character(sys3$Tioguanin..Lanvis.)
+sys3$Tioguanin..Lanvis.[sys3$Tioguanin..Lanvis.=="1"] <- "Tioguanin"
+
+sys3$Ustekinumab..Stelara. <- as.character(sys3$Ustekinumab..Stelara.)
+sys3$Ustekinumab..Stelara.[sys3$Ustekinumab..Stelara.=="1"] <- "Ustekinumab"
+
+if("Apremilast..Otezla." %in% names(sys3)){
+        sys3$Apremilast..Otezla. <- as.character(sys3$Apremilast..Otezla.)
+        sys3$Apremilast..Otezla.[sys3$Apremilast..Otezla.=="1"] <- "Aprimelast"
+}
+
+if("Infliximab.Biosimilar..Inflectra.Remsima." %in% names(sys3)){
+        sys3$Infliximab.Biosimilar..Inflectra.Remsima. <- as.character(sys3$Infliximab.Biosimilar..Inflectra.Remsima.)
+        sys3$Infliximab.Biosimilar..Inflectra.Remsima.[sys3$Infliximab.Biosimilar..Inflectra.Remsima.=="1"] <- "Infliximab.Bio"
+        
+}
+
+if("Sekukinumab..Cosentyx." %in% names(sys3)){
+        sys3$Sekukinumab..Cosentyx. <- as.character(sys3$Sekukinumab..Cosentyx.)
+        sys3$Sekukinumab..Cosentyx.[sys3$Sekukinumab..Cosentyx.=="1"] <- "Sekukinumab"
+        
+}
+
+
+sys3[sys3=="0"] <- ""
+
+
+kombi <-  paste(sys3[,1],sys3[,2],sys3[,3],sys3[,4],sys3[,5],sys3[,6],sys3[,7],sys3[,8],sys3[,9],sys3[,10],sys3[,11],sys3[,12])
+
+
+
+if(ncol(sys3)>14)
+        kombi <- paste(kombi, sys3[,13])
+
+if(ncol(sys3)>15)
+        kombi <- paste(kombi, sys3[,14])
+
+if(ncol(sys3)>16)
+        kombi <- paste(kombi, sys3[,15])
+
+if(ncol(sys3)>17)
+        kombi <- paste(kombi, sys3[,16])
+
+if(ncol(sys3)>18)
+        kombi <- paste(kombi, sys3[,17])
+
+
+sys3$kombi_läkemedel <- str_replace_all(string=kombi, pattern=" ", repl="")
+
+sys3 <- subset(sys3,antal_läkemedel>1)
+
+#sta <- stat.table(index=list(kombi_läkemedel), contents=count(), data=sys3, margins=1)
+
+sys <- sys[order(sys$InsertDate,decreasing=TRUE),]
+
+sys$dupli <- duplicated(sys$PERSNR)
+
+dat_sjuk <- subset(sys, dupli==FALSE)
+
+dat_sjuk <- dat_sjuk[,1:3]
+
+dat_sjuk <- dat_sjuk[,-2]
+
+dats <- merge(sys3,dat_sjuk,by.x="PNR",by.y="PERSNR")
+
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabMetotrexat"] <- "Adalimumab:Metotrexat"
+
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabEtanercept"] <- "Adalimumab:Etanercept"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="EtanerceptMetotrexat"] <- "Etanercept:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="InfliximabMetotrexat"] <- "Infliximab:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="Metotrexat1"] <- "Ustekinumab:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinMetotrexat"] <- "Acitretin:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="CiklosporinMetotrexat"] <- "Ciklosporin:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinEtanercept"] <- "Acitretin:Etanercept"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="Acitretin1"] <- "Acitretin:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinAdalimumab"] <- "Acitretin:Adalimumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinPUVA"] <- "Acitretin:PUVA"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="Infliximab1"] <- "Infliximab:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="MetotrexatPUVA"] <-  "PUVA:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinAlitretinoin"] <- "Acitretin:Alitretinoin"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinCiklosporin"] <- "Acitretin:Ciklosporin"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinEfalizumab"] <- "Acitretin:Efalizumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinMetotrexat1"] <- "Acitretin:Metotrexat:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="Adalimumab1"] <- "Adalimumab:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabEtanercept1"] <- "Adalimumab:Etanercept:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabInfliximabMetotrexat"] <- "Adalimumab:Infliximab:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AdalimumabPUVA"] <- "Adalimumab:PUVA"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="CiklosporinEtanercept"] <- "Ciklosporin:Etanercept"
+
+
+dats$kombi_läkemedel[dats$kombi_läkemedel=="Etanercept1"] <- "Etanercept:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="EtanerceptMetotrexat1"] <- "Etanercept:Metotrexat:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="Fumaderm1"] <- "Fumaderm:Ustekinumab"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="InfliximabMetotrexat1"] <- "Infliximab:Metotrexat:Ustekinumab"
+
+dats$kombi_läkemedel[dats$kombi_läkemedel=="MetotrexatUstekinumab"] <- "Ustekinumab:Metotrexat"
+dats$kombi_läkemedel[dats$kombi_läkemedel=="AcitretinUstekinumab"] <- "Acitretin:Ustekinumab"
+#######
+tabl <- table(dats$kombi_läkemedel)
+
+
+
+tabl <- as.table(tabl[order(tabl,decreasing=TRUE)][1:10])
+tabl <- tabl[order(tabl,decreasing=FALSE)]
+
+par(mar=c(3,15,2,2))
+bar1 <- barplot(tabl,las=2,horiz=TRUE,col=t7_1,main="Kombinationsbehandingar",xaxt="n",xlim=c(0,max(tabl)+25),cex.main=0.9)
+axis(side=1)
+text(tabl,bar1,tabl,cex=0.8,pos=4)
+```
+
+
+
 ```{r AntalPatinter_arsrapport, echo=FALSE}
 ######## Antal patinter per kvartal
 
-Pso_contact1=Pso_contact
-Pso_contact1$ar=format(as.Date(Pso_contact1$ContactDate), "%Y")
-Pso_contact1$monad=as.numeric(format(as.Date(Pso_contact1$ContactDate), "%m"))
-Pso_contact1=subset(Pso_contact1,ar==2015)
-
-Pso_contact1= Pso_contact1[with(Pso_contact1, order(as.Date(Pso_contact1$ContactDate), Pso_contact1$PERSNR)), ]  #sorterar patient enligt kont.datum & PNR  
-Pso_contact1$unikaPNR <- duplicated(Pso_contact1$PERSNR)
-Pso_contact1=subset(Pso_contact1,Pso_contact1$unikaPNR==FALSE)
-dim(Pso_contact1)
 
 
-figdata <- Pso_contact1 %>% select(Sjukhus, Kön) %>% 
-      mutate(Gender = cut(Kön, breaks = c(0,1,2), labels = c('Man','Kvinna'))) %>% 
+
+
+figdata <- Pso_individ_2015 %>% select(Sjukhus, Kon_value) %>% 
+      mutate(Gender = cut(Kon_value, breaks = c(0,1,2), labels = c('Man','Kvinna'))) %>% 
       group_by(Sjukhus, Gender) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,addCI=F,sizelimit=2)#kolla upp vad som är man resp kvinna
+
+gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,addCI=F,sizelimit=10,plotcolors = t7_2) #kolla upp vad som är man resp kvinna
 
 #gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,stacked = F,addCI=F)
 
@@ -182,51 +470,129 @@ gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivninga
 
 ```
 
+```{r tabell_systembehandlingar, echo=FALSE}
+
+Pso_beh_2011 <- subset(Pso_behandling, InsertDate< "2012-01-01")
+Pso_beh_2011 <- subset(Pso_beh_2011, RemoveDate> "2011-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2011$År_behandling <- rep(2011, nrow(Pso_beh_2011))
+
+Pso_beh_2012 <- subset(Pso_behandling, InsertDate< "2013-01-01")
+Pso_beh_2012 <- subset(Pso_beh_2012, RemoveDate> "2012-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2012$År_behandling <- rep(2012, nrow(Pso_beh_2012))
+
+Pso_beh_2013 <- subset(Pso_behandling, InsertDate< "2014-01-01")
+Pso_beh_2013 <- subset(Pso_beh_2013, RemoveDate> "2013-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2013$År_behandling <- rep(2013, nrow(Pso_beh_2013))
+
+Pso_beh_2014 <- subset(Pso_behandling, InsertDate< "2015-01-01")
+Pso_beh_2014 <- subset(Pso_beh_2014, RemoveDate> "2014-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2014$År_behandling <- rep(2014, nrow(Pso_beh_2014))
+
+Pso_beh_2015 <- subset(Pso_behandling, InsertDate< "2016-01-01")
+Pso_beh_2015 <- subset(Pso_beh_2015, RemoveDate> "2015-12-31"|is.na(RemoveDate)==TRUE)
+Pso_beh_2015$År_behandling <- rep(2015, nrow(Pso_beh_2015))
+
+
+Pso_linjegrafdata <- rbind(Pso_beh_2011, Pso_beh_2012, Pso_beh_2013, Pso_beh_2014, Pso_beh_2015)
+
+tab_logic <- table(Pso_linjegrafdata$DrugName)/sum(table(Pso_linjegrafdata$DrugName))*100>0.5
+tab_logic <- data.frame(tab_logic)
+tab_logic <- data.frame(tab_logic, dimnames(tab_logic[[1]]))
+names(tab_logic) <- c("logisk", "Systembehandling")
+
+
+tab_logic <- subset(tab_logic, logisk==TRUE)
+
+Pso_linjegrafdata <- subset(Pso_linjegrafdata, DrugName %in% tab_logic$Systembehandling)
+
+
+#linjegrafdata_bio <- subset(Pso_linjegrafdata, biologisk=="Ja")
+#Pso_linjegrafdata <- subset(Pso_linjegrafdata, biologisk=="Ja")
+
+data_plot <-  Pso_linjegrafdata %>% group_by(År_behandling, DrugName) %>% 
+        summarise(antal = n()) %>% 
+        group_by(year = År_behandling) %>% 
+        mutate(ntot = sum(antal), procentandel = antal/ntot)
+
+data_plot <- as.data.frame(data_plot)
+
+tabel_behand<- cast(data_plot, DrugName ~ År_behandling  ,value="procentandel")
+tabel_behand <- as.data.frame(tabel_behand) 
+tabel_behand[,2:ncol(tabel_behand)] <- round(tabel_behand[,2:ncol(tabel_behand)]*100 ,2)
+
+tabel_behand[is.na(tabel_behand)] <- 0
+
+names(tabel_behand)[1] <- "Systembehandling"
+
+kable(tabel_behand)
+#ggplot(data=data_plot ,aes(x = År_behandling, y = p, color = DrugName))  + theme_minimal() + #geom_line(lwd = 1)
+
+
+
+
+
+
+
+```
+
+
+```{r area plot_systembehandlingar}
+data_plot2 <-  Pso_linjegrafdata %>% group_by(År_behandling, DrugName) %>% 
+        summarise(antal = n()) %>% 
+        mutate(ntot = sum(antal), p = antal/ntot*100)
+
+qplot(År_behandling, p, data=data_plot2, geom="area", fill = DrugName, xlab="År", ylab="Andel (%)") 
+#+        GynopTools::theme_gynop()
+```
+
+
+
+
+```{r befolkningspyramid,fig.width=9,fig.height=7 ,echo=FALSE}
+
+tabsa <- table(Pso_individ$Kön, Pso_individ$Ålder_kategori2)
+
+dat1 <-as.numeric(tabsa[1,])
+dat2 <- as.numeric(tabsa[2,])
+names(dat1) <- c('10-14','15-19','20-24','25-29','30-34','35-39','40-44','45-49','50-54','55-59','60-64','65-69','70-74','75-79','80-84','85-89','90-94')
+names(dat2) <- names(dat1)
+
+dat_pyr <- data.frame(dat1, dat2)
+
+#par(mar=c(3, 3.1 , 2 , 3.1))
+pyramid(dat_pyr,Llab="Kvinnor",Rlab="Män",Lcol='#d7191c', Rcol='#2b83ba',Clab="Ålder",Laxis=c(0,50,100,150,200,250,300,350,400),Csize=1.3)
+
+```
 
 ```{r utfallsM_arsrapport, echo=FALSE}
-
-#PASI_index
-
-figdata <- Pso_contact1 %>% select(Sjukhus, PASI_index)
-  
-figtitle = 'PASI INDEX'
-
-gdotplot(figdata, variable = 'PASI_index', sjukhus = 'Sjukhus',
-         main = figtitle, addmedian = T)
-
-gdotplot(figdata, variable = 'PASI_index', sjukhus = 'Sjukhus',
-         main = figtitle, addmedian = T, whitelines = F)
-
-gdotplot(figdata, variable = 'PASI_index', sjukhus = 'Sjukhus',
-         main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
-
-#DLQI_index
-figdata <- Pso_contact1 %>% select(Sjukhus, DLQI_index)
-  
-figtitle = 'DLQI INDEX'
-
-gdotplot(figdata, variable = 'DLQI_index', sjukhus = 'Sjukhus',
-         main = figtitle, addmedian = T)
-
-gdotplot(figdata, variable = 'DLQI_index', sjukhus = 'Sjukhus',
-         main = figtitle, addmedian = T, whitelines = F)
-
-gdotplot(figdata, variable = 'DLQI_index', sjukhus = 'Sjukhus',
-         main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
 
 
 
 #EQ5D_index
 
-figdata <- Pso_contact1 %>% select(Sjukhus, EQ5D_index)
+figdata <- Pso_individ_2015 %>% select(Sjukhus, EQ5D_index)
   
 figtitle = 'EQ5D INDEX'
 
-gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
-         main = figtitle, addmedian = T)
+#gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
+         #main = figtitle, addmedian = T)
+
+#gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
+         #main = figtitle, addmedian = T, whitelines = F)
 
 gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
-         main = figtitle, addmedian = T, whitelines = F)
+         main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
+
+figdata <- Pso_kon %>% select(Sjukhus, EQ5D_index) %>% filter(!is.na(EQ5D_index))
+  
+figtitle = 'EQ5D konvent.'
+
+gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
+         main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
+
+figdata <- Pso_bio %>% select(Sjukhus, EQ5D_index) %>% filter(!is.na(EQ5D_index))
+  
+figtitle = 'EQ5D biolog.'
 
 gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
          main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
@@ -234,21 +600,208 @@ gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
 
 ```
 
-```{r rokare, echo=FALSE}
-Pso_contact1$Smoker_Numb=as.character(Pso_contact1$Smoker_Beskrivning)
-Pso_contact1$Smoker_Numb[Pso_contact1$Smoker_Numb=="Ja, röker"]<- 1
-Pso_contact1$Smoker_Numb[Pso_contact1$Smoker_Numb=="Har slutat röka"]<-2
-Pso_contact1$Smoker_Numb[Pso_contact1$Smoker_Numb=="Nej"]<-3
-Pso_contact1$Smoker_Numb=as.numeric(Pso_contact1$Smoker_Numb)
+```{r utfall_ny, echo=FALSE}
 
-figdata <- Pso_contact1 %>% select(Sjukhus, Smoker_Numb) %>% 
-      mutate(Smoke = cut(Smoker_Numb, breaks = c(0,1,2,3), labels = c('Ja','Slutat','Nej'))) %>% 
-      group_by(Sjukhus, Smoke) %>%
+
+Pso_individ_2015$PASI_grup <- as.numeric(cut(Pso_individ_2015$PASI_index, breaks = c(-0.1,4.9999,9.9999,500),labels=c(1,2,3)))
+Pso_bio$PASI_grup <- as.numeric(cut(Pso_bio$PASI_index, breaks = c(-0.1,4.9999,9.9999,5000),labels=c(1,2,3)))
+
+Pso_individ_2015$DLQI_grup <- as.numeric(cut(Pso_individ_2015$DLQI_index, breaks = c(-0.1,4.9999,9.9999,500),labels=c(1,2,3)))
+Pso_bio$DLQI_grup <- as.numeric(cut(Pso_bio$DLQI_index, breaks = c(-0.1,4.9999,9.9999,5000),labels=c(1,2,3)))
+
+
+Pso_kon=Pso_individ_2015
+Pso_kon = Pso_kon[as.numeric(Pso_kon$PERSNR) %ni% as.numeric(Pso_bio$PERSNR),]
+
+
+
+figdata <- Pso_individ_2015 %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
+      mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      group_by(Sjukhus, PASI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'Smoke', sjukhus = 'Sjukhus', main = "Andel rökare",percent = T,addCI=F,sizelimit=2)#kolla upp vad som är man resp kvinna
+
+
+gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+
+figtitle = 'PASI INDEX konvent.'
+
+figdata <- Pso_kon %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
+      mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      group_by(Sjukhus, PASI_grup) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+
+figtitle = 'PASI INDEX biolog.'
+
+figdata <- Pso_bio %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
+      mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      group_by(Sjukhus, PASI_grup) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+
+
+
+gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+
+
+#DLQI_index
+
+figdata <- Pso_individ_2015 %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
+      mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      group_by(Sjukhus, DLQI_grup) %>%
+      summarise(n = n()) %>% data.frame()
+  
+figtitle = 'DLQI INDEX'
+
+gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+
+figdata <- Pso_kon %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
+      mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      group_by(Sjukhus, DLQI_grup) %>%
+      summarise(n = n()) %>% data.frame()
+
+
+figtitle = 'DLQI INDEX konvent.'
+
+gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+
+
+figdata <- Pso_bio %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
+      mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      group_by(Sjukhus, DLQI_grup) %>%
+      summarise(n = n()) %>% data.frame()
+
+figtitle = 'DLQI INDEX biolog.'
+
+
+gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+
+
+
 ```
 
 
 
+
+
+```{r rokare, echo=FALSE}
+
+
+
+
+Pso_individ_2015$Smoker_Numb=as.character(Pso_individ_2015$Smoker_Beskrivning)
+Pso_individ_2015$Smoker_Numb[Pso_individ_2015$Smoker_Numb=="Ja, röker"]<- 1
+Pso_individ_2015$Smoker_Numb[Pso_individ_2015$Smoker_Numb=="Har slutat röka"]<-2
+Pso_individ_2015$Smoker_Numb[Pso_individ_2015$Smoker_Numb=="Nej"]<-3
+Pso_individ_2015$Smoker_Numb=as.numeric(Pso_individ_2015$Smoker_Numb)
+
+figdata <- Pso_individ_2015 %>% select(Sjukhus, Smoker_Numb) %>% filter(!is.na(Smoker_Numb)) %>% 
+      mutate(Smoke = cut(Smoker_Numb, breaks = c(0,1,2,3), labels = c('Ja','Slutat','Nej'))) %>% 
+      group_by(Sjukhus, Smoke) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'Smoke', sjukhus = 'Sjukhus', main = "Andel rökare",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3) #kolla upp vad som är man resp kvinna
+
+```
+
+```{r biolog_vs_konvet, echo=FALSE}
+
+#Pso_bio=Pso_individ
+
+#Pso_bio=subset(Pso_bio,Contact_year==2015)
+
+Pso_kon$aktiv=2
+Pso_bio$aktiv=1
+
+TEMP11=subset(Pso_kon,select = c(PERSNR,Kön,BMI,aktiv,Sjukhus))
+TEMP22=subset(Pso_bio,select = c(PERSNR,Kön,BMI,aktiv,Sjukhus))
+
+Temp_data=rbind(TEMP11,TEMP22)
+  
+Temp_data$Gender_Numb=as.character(Temp_data$Kön)
+Temp_data$Gender_Numb[Temp_data$Gender_Numb=="Man"]<- 1
+Temp_data$Gender_Numb[Temp_data$Gender_Numb=="Kvinna"]<-2
+Temp_data$Gender_Numb=as.numeric(Temp_data$Gender_Numb)
+
+Temp_data$BMI_kategori <- cut(Temp_data$BMI, breaks = c(0,18.49999,24.99999,29.99999,100),labels=c("Undervikt","Normalvikt", "Övervikt", "Fetma"))
+
+
+Temp_data$BMI_kategori=as.character(Temp_data$BMI_kategori)
+Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Undervikt"]<- 1
+Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Normalvikt"]<-2
+Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Övervikt"]<- 3
+Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Fetma"]<-4
+
+Temp_data$BMI_kategori=as.numeric(Temp_data$BMI_kategori)
+
+Temp_data$BIO=as.character(Temp_data$aktiv)
+Temp_data$BIO[Temp_data$BIO=="Ja"]<- 1
+Temp_data$BIO[Temp_data$BIO=="Nej"]<-2
+Temp_data$BIO=as.numeric(Temp_data$BIO)
+
+
+#figdata <- Pso_bio %>% select(Sjukhus, BMI_kategori, aktiv_biologisk) %>% 
+ #   filter(!is.na(aktiv_biologisk)) %>%   mutate(BMI = cut(BMI_kategori, breaks = c(0,1,2,3,4), labels = c('Övervikt','Normalvikt','Underviktiv','Fetma')),
+   #          Sjukhus = factor(Sjukhus))
+
+figdata <- Temp_data %>% select(Sjukhus, BMI_kategori) %>% filter(!is.na(BMI_kategori)) %>% 
+      mutate(BMI = cut(BMI_kategori,  breaks = c(0,1,2,3,4), labels = c('Undervikt','Normalvikt','Övervikt','Fetma'))) %>% 
+      group_by(Sjukhus, BMI) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'BMI', sjukhus = 'Sjukhus', main = "Fördelning BMI",percent = T,addCI=F,sizelimit=10,plotcolors = t7_4)
+
+
+figdata <- Temp_data %>% select(Sjukhus, BIO) %>% filter(!is.na(BIO)) %>% 
+      mutate(BIOlog = cut(BIO,  breaks = c(0,1,2), labels = c('Bioligisk','Konvent'))) %>% 
+      group_by(Sjukhus, BIOlog) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'BIOlog', sjukhus = 'Sjukhus', main = "Fördelning behandling",percent = T,addCI=F,sizelimit=10,plotcolors = t7_2,plot.riket = 'no')
+
+
+```
+
+
+
+
+```{r behandling_ny, echo=FALSE}
+TempData=Aktiva_behandlingar
+
+v1=100*summary(Aktiva_behandlingar$DrugName)/length(TempData$DrugName)
+
+namn_new=vector()
+namn_pos=vector()
+
+for ( i in 1:length(v1)) {
+
+    if (v1[i]>1){
+      namn_new[i]=names(v1[i])
+    }
+}
+namn_new=as.character(na.omit(namn_new))
+
+TempData = subset(TempData, DrugName %in% namn_new)
+
+TempData$Behandling_num=as.numeric(factor(TempData$DrugName))
+namn=levels(factor(TempData$DrugName))
+
+
+
+figdata <- TempData %>% select(Sjukhus, Behandling_num) %>% filter(!is.na(Behandling_num)) %>% 
+      mutate(Behandling = cut(Behandling_num, breaks =rep(0:length(namn)),labels=namn)) %>% 
+      group_by(Sjukhus, Behandling) %>%
+      summarise(n = n()) %>% data.frame()
+
+
+mypalette<-brewer.pal(length(namn),"Set3")
+
+gbarplot(figdata, variable = 'Behandling', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors =mypalette)
+
+
+
+```
 
