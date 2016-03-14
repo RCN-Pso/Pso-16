@@ -23,6 +23,7 @@ library(ggplot2)
 library(tidyr)
 library(pyramid)
 
+
 '%ni%' = Negate('%in%')
 
 library(RCurl)
@@ -56,11 +57,16 @@ Pso_contact <- read.delim(file="H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016
 #namnger variablerna ändra datatyper, plockar bort testpatienter och plockar bort kontakter utan kontaktdatum och kontakter efter 2015-12-31
 names(Pso_contact)[1:9]<- c("PERSNR","Pnyckel_contact","Pnyckel_root","Fnyckel_contact","PAT_ID","Kön","Aktiv_patient", "Sjukhus","ContactDate")
 names(Pso_contact)[40]<- c("Sjukhus_ny")
+
+
 Pso_contact$Sjukhus <- as.character(Pso_contact$Sjukhus)
 Pso_contact <- Pso_contact[!(Pso_contact$Sjukhus=="Test") ,]
 Pso_contact$ContactDate <- as.Date(Pso_contact$ContactDate)
 Pso_contact <- subset(Pso_contact, is.na(ContactDate)==FALSE)
 Pso_contact <- subset(Pso_contact, ContactDate<"2016-01-01")
+Pso_contact <- subset(Pso_contact, ContactDate>"2006-01-01")
+  
+Pso_contact$Sjukhus_ny <- as.character(Pso_contact$Sjukhus_ny)
 
 
 #Sorterar datat och skapar en variabel som indikerar de unika individerna dupli_PatientID=FALSE=Sista kontakten per individ
@@ -135,8 +141,11 @@ Pso_behandling$RemoveDate <- as.character(Pso_behandling$RemoveDate)
 
 Pso_behandling$DrugName <- factor(Pso_behandling$DrugName)
 Pso_behandling$DrugName <- factor(Pso_behandling$DrugName,levels(Pso_behandling$DrugName)[c(12,1,4,6,13,9,15,3,5,10,8,2,11,16,14,7)])
+####
 
 
+
+#as.character(tab_logic$Systembehandling)[1]
 ###Skapar dataset med endast Metotrexatbehandlingar
 Pso_Metotrexat <- Pso_behandling[Pso_behandling$DrugName==c("Metotrexat"),]
 ## Sätter ett datum på Removedate på de behandlingar som inte än är utskrivna 
@@ -158,6 +167,29 @@ Aktiva_behandlingar <-  subset(Pso_behandling,is.na(Pso_behandling$RemoveDate)==
 Aktiva_behandlingar$DrugName <- as.factor(Aktiva_behandlingar$DrugName)
 
 
+
+#####
+tab_logic <- table(Aktiva_behandlingar$DrugName)/sum(table(Aktiva_behandlingar$DrugName))*100>1
+tab_logic <- data.frame(tab_logic)
+tab_logic <- data.frame(tab_logic, dimnames(tab_logic[[1]]))
+names(tab_logic) <- c("logisk", "Systembehandling")
+
+tab_logic <- subset(tab_logic, logisk==F)
+
+Aktiva_behandlingar$DrugName2 <- as.character(Aktiva_behandlingar$DrugName)
+
+
+
+for(i in 1:nrow(tab_logic)){
+Aktiva_behandlingar$DrugName2[Aktiva_behandlingar$DrugName2==as.character(tab_logic$Systembehandling)[i]] <- "Övriga"
+}
+
+Aktiva_behandlingar$DrugName2 <- factor(Aktiva_behandlingar$DrugName2)
+Aktiva_behandlingar$DrugName2 <-factor(Aktiva_behandlingar$DrugName2,levels(Aktiva_behandlingar$DrugName2)[c(5,1,3,2,4,6,7)])
+
+#####
+
+
 ### Lägger till en variabel som anger om patienten är biologisk patient till dataramen ##Pso_individ
 
 Pso_tmp1 <- subset(Aktiva_behandlingar, biologisk!="")
@@ -172,8 +204,17 @@ Pso_individ <- merge(Pso_individ, mergdata,all.x=TRUE, by.x="PERSNR", by.y="PERS
 
 Pso_individ_2015 <- subset(Pso_individ,Contact_year==2015)
 
+
+Pso_individ_2015$PASI_grup <- as.numeric(cut(Pso_individ_2015$PASI_index, breaks = c(-0.1,4.9999,9.9999,500),labels=c(1,2,3)))
+
+Pso_individ_2015$DLQI_grup <- as.numeric(cut(Pso_individ_2015$DLQI_index, breaks = c(-0.1,4.9999,9.9999,500),labels=c(1,2,3)))
+
+
+
 Pso_bio <- subset(Pso_individ_2015, aktiv_biologisk=="Ja")
 Pso_kon <- subset(Pso_individ_2015, aktiv_biologisk=="Nej")
+
+
 
 ```
 
@@ -242,6 +283,83 @@ points(2006,sum(as.vector(artab[1:1,2])),pch = 20,col="firebrick1")
 
 ```
 
+```{r befolkningspyramid,fig.width=9,fig.height=7 ,echo=FALSE}
+
+tabsa <- table(Pso_individ$Kön, Pso_individ$Ålder_kategori2)
+
+dat1 <-as.numeric(tabsa[1,])
+dat2 <- as.numeric(tabsa[2,])
+names(dat1) <- c('10-14','15-19','20-24','25-29','30-34','35-39','40-44','45-49','50-54','55-59','60-64','65-69','70-74','75-79','80-84','85-89','90-94')
+names(dat2) <- names(dat1)
+
+dat_pyr <- data.frame(dat1, dat2)
+
+#par(mar=c(3, 3.1 , 2 , 3.1))
+pyramid(dat_pyr,Llab="Kvinnor",Rlab="Män",Lcol='#d7191c', Rcol='#2b83ba',Clab="Ålder",Laxis=c(0,50,100,150,200,250,300,350,400),Csize=1.3)
+
+```
+
+```{r biolog_vs_konvet, echo=FALSE}
+
+#Pso_bio=Pso_individ
+
+#Pso_bio=subset(Pso_bio,Contact_year==2015)
+
+Pso_kon$aktiv=2
+Pso_bio$aktiv=1
+
+TEMP11=subset(Pso_kon,select = c(PERSNR,Kön,BMI,aktiv,Sjukhus))
+TEMP22=subset(Pso_bio,select = c(PERSNR,Kön,BMI,aktiv,Sjukhus))
+
+Temp_data=rbind(TEMP11,TEMP22)
+  
+Temp_data$Gender_Numb=as.character(Temp_data$Kön)
+Temp_data$Gender_Numb[Temp_data$Gender_Numb=="Man"]<- 1
+Temp_data$Gender_Numb[Temp_data$Gender_Numb=="Kvinna"]<-2
+Temp_data$Gender_Numb=as.numeric(Temp_data$Gender_Numb)
+
+Temp_data$BMI_kategori <- cut(Temp_data$BMI, breaks = c(0,18.49999,24.99999,29.99999,100),labels=c("Undervikt","Normalvikt", "Övervikt", "Fetma"))
+
+
+Temp_data$BMI_kategori=as.character(Temp_data$BMI_kategori)
+Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Undervikt"]<- 1
+Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Normalvikt"]<-2
+Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Övervikt"]<- 3
+Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Fetma"]<-4
+
+Temp_data$BMI_kategori=as.numeric(Temp_data$BMI_kategori)
+
+Temp_data$BIO=as.character(Temp_data$aktiv)
+Temp_data$BIO[Temp_data$BIO=="Ja"]<- 1
+Temp_data$BIO[Temp_data$BIO=="Nej"]<-2
+Temp_data$BIO=as.numeric(Temp_data$BIO)
+
+
+#figdata <- Pso_bio %>% select(Sjukhus, BMI_kategori, aktiv_biologisk) %>% 
+ #   filter(!is.na(aktiv_biologisk)) %>%   mutate(BMI = cut(BMI_kategori, breaks = c(0,1,2,3,4), labels = c('Övervikt','Normalvikt','Underviktiv','Fetma')),
+   #          Sjukhus = factor(Sjukhus))
+
+figdata <- Temp_data %>% select(Sjukhus, BMI_kategori) %>% filter(!is.na(BMI_kategori)) %>% 
+      mutate(BMI = cut(BMI_kategori,  breaks = c(0,1,2,3,4), labels = c('Undervikt','Normalvikt','Övervikt','Fetma'))) %>% 
+      group_by(Sjukhus, BMI) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'BMI', sjukhus = 'Sjukhus', main = "Fördelning BMI",percent = T,addCI=F,sizelimit=10,plotcolors = t7_4)
+
+
+figdata <- Temp_data %>% select(Sjukhus, BIO) %>% filter(!is.na(BIO)) %>% 
+      mutate(BIOlog = cut(BIO,  breaks = c(0,1,2), labels = c('Bioligisk','Konvent'))) %>% 
+      group_by(Sjukhus, BIOlog) %>%
+      summarise(n = n()) %>% data.frame()
+
+gbarplot(figdata, variable = 'BIOlog', sjukhus = 'Sjukhus', main = "Fördelning behandling",percent = T,addCI=F,sizelimit=10,plotcolors = t7_2,plot.riket = 'no')
+
+
+```
+
+
+
+# Systembehandlingar
 ```{r stapel_systembehandlingar, echo=FALSE, fig.width=10, fig.height=11}
 #names(df) <- c("RemoveDate", "Treatment", "Hospcode", "Sjukhuskod", "Sjukhusnamn", "sjukhusnamn_miljo","Regbehor")
 
@@ -445,32 +563,9 @@ text(tabl,bar1,tabl,cex=0.8,pos=4)
 
 
 
-```{r AntalPatinter_arsrapport, echo=FALSE}
-######## Antal patinter per kvartal
 
 
-
-
-
-figdata <- Pso_individ_2015 %>% select(Sjukhus, Kon_value) %>% 
-      mutate(Gender = cut(Kon_value, breaks = c(0,1,2), labels = c('Man','Kvinna'))) %>% 
-      group_by(Sjukhus, Gender) %>%
-      summarise(n = n()) %>% data.frame()
-
-
-gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,addCI=F,sizelimit=10,plotcolors = t7_2) #kolla upp vad som är man resp kvinna
-
-#gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = T,stacked = F,addCI=F)
-
-#gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = F,stacked = F)
-
-#gbarplot(figdata, variable = 'Gender', sjukhus = 'Sjukhus', main = "Inskrivningar per klinik",percent = F,stacked = T)
-
-
-
-```
-
-```{r tabell_systembehandlingar, echo=FALSE}
+```{r beräkningar_systembehandlingar_tid, echo=FALSE}
 
 Pso_beh_2011 <- subset(Pso_behandling, InsertDate< "2012-01-01")
 Pso_beh_2011 <- subset(Pso_beh_2011, RemoveDate> "2011-12-31"|is.na(RemoveDate)==TRUE)
@@ -495,16 +590,30 @@ Pso_beh_2015$År_behandling <- rep(2015, nrow(Pso_beh_2015))
 
 Pso_linjegrafdata <- rbind(Pso_beh_2011, Pso_beh_2012, Pso_beh_2013, Pso_beh_2014, Pso_beh_2015)
 
-tab_logic <- table(Pso_linjegrafdata$DrugName)/sum(table(Pso_linjegrafdata$DrugName))*100>0.5
+
+
+###
+
+tab_logic <- table(Pso_linjegrafdata$DrugName)/sum(table(Pso_linjegrafdata$DrugName))*100>1
 tab_logic <- data.frame(tab_logic)
 tab_logic <- data.frame(tab_logic, dimnames(tab_logic[[1]]))
 names(tab_logic) <- c("logisk", "Systembehandling")
 
+tab_logic <- subset(tab_logic, logisk==F)
 
-tab_logic <- subset(tab_logic, logisk==TRUE)
+Pso_linjegrafdata$DrugName2 <- as.character(Pso_linjegrafdata$DrugName)
 
-Pso_linjegrafdata <- subset(Pso_linjegrafdata, DrugName %in% tab_logic$Systembehandling)
 
+
+for(i in 1:nrow(tab_logic)){
+Pso_linjegrafdata$DrugName2[Pso_linjegrafdata$DrugName2==as.character(tab_logic$Systembehandling)[i]] <- "övriga systembehandlingar"
+}
+
+Pso_linjegrafdata$DrugName2 <- factor(Pso_linjegrafdata$DrugName2)
+Pso_linjegrafdata$DrugName2 <-factor(Pso_linjegrafdata$DrugName2,levels(Pso_linjegrafdata$DrugName2)[c(5,1,3,2,4,6,7)])
+
+
+###
 
 #linjegrafdata_bio <- subset(Pso_linjegrafdata, biologisk=="Ja")
 #Pso_linjegrafdata <- subset(Pso_linjegrafdata, biologisk=="Ja")
@@ -524,7 +633,7 @@ tabel_behand[is.na(tabel_behand)] <- 0
 
 names(tabel_behand)[1] <- "Systembehandling"
 
-kable(tabel_behand)
+
 #ggplot(data=data_plot ,aes(x = År_behandling, y = p, color = DrugName))  + theme_minimal() + #geom_line(lwd = 1)
 
 
@@ -536,85 +645,89 @@ kable(tabel_behand)
 ```
 
 
-```{r area plot_systembehandlingar}
-data_plot2 <-  Pso_linjegrafdata %>% group_by(År_behandling, DrugName) %>% 
+```{r area plot_systembehandlingar, fig.height=6}
+
+
+data_plot2 <-  Pso_linjegrafdata %>% group_by(År_behandling, DrugName2) %>% 
         summarise(antal = n()) %>% 
         mutate(ntot = sum(antal), p = antal/ntot*100)
 
-qplot(År_behandling, p, data=data_plot2, geom="area", fill = DrugName, xlab="År", ylab="Andel (%)") 
+fargval<-brewer.pal(length(levels(data_plot2$DrugName2)),"Set3")
+fargval <- rep(fargval,5)
+
+qplot(År_behandling, p, data=data_plot2, geom="area", fill = DrugName2, xlab="År", ylab="Andel (%)") 
+
+
+
+
+
 #+        GynopTools::theme_gynop()
 ```
 
+```{r tabell_systembehandlingar}
+kable(tabel_behand)
+```
+
+
+```{r behandling_ny, echo=FALSE}
+TempData=Aktiva_behandlingar
 
 
 
-```{r befolkningspyramid,fig.width=9,fig.height=7 ,echo=FALSE}
+TempData$Behandling_num=as.numeric(factor(TempData$DrugName2))
+namn=levels(factor(TempData$DrugName2))
 
-tabsa <- table(Pso_individ$Kön, Pso_individ$Ålder_kategori2)
 
-dat1 <-as.numeric(tabsa[1,])
-dat2 <- as.numeric(tabsa[2,])
-names(dat1) <- c('10-14','15-19','20-24','25-29','30-34','35-39','40-44','45-49','50-54','55-59','60-64','65-69','70-74','75-79','80-84','85-89','90-94')
-names(dat2) <- names(dat1)
 
-dat_pyr <- data.frame(dat1, dat2)
+figdata <- TempData %>% select(Sjukhus, Behandling_num) %>% filter(!is.na(Behandling_num)) %>% 
+      mutate(Behandling = cut(Behandling_num, breaks =rep(0:length(namn)),labels=namn)) %>% 
+      group_by(Sjukhus, Behandling) %>%
+      summarise(n = n()) %>% data.frame()
 
-#par(mar=c(3, 3.1 , 2 , 3.1))
-pyramid(dat_pyr,Llab="Kvinnor",Rlab="Män",Lcol='#d7191c', Rcol='#2b83ba',Clab="Ålder",Laxis=c(0,50,100,150,200,250,300,350,400),Csize=1.3)
+
+mypalette<-brewer.pal(length(namn),"Set3")
+
+gbarplot(figdata, variable = 'Behandling', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors =mypalette)
+
+
 
 ```
 
-```{r utfallsM_arsrapport, echo=FALSE}
 
-
-
+# EQ-5D kliniknivå
+```{r EQ-5D_helpop}
 #EQ5D_index
 
 figdata <- Pso_individ_2015 %>% select(Sjukhus, EQ5D_index)
   
 figtitle = 'EQ5D INDEX'
 
-#gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
-         #main = figtitle, addmedian = T)
-
-#gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
-         #main = figtitle, addmedian = T, whitelines = F)
-
 gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
          main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
+```
 
+# EQ-5D kliniknivå, konventionella patienter
+```{r EQ-5D_konventionell}
 figdata <- Pso_kon %>% select(Sjukhus, EQ5D_index) %>% filter(!is.na(EQ5D_index))
   
 figtitle = 'EQ5D konvent.'
 
 gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
          main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
+```
 
+# EQ-5D kliniknivå, biologiska patienter
+```{r EQ-5D_biologisk}
 figdata <- Pso_bio %>% select(Sjukhus, EQ5D_index) %>% filter(!is.na(EQ5D_index))
   
 figtitle = 'EQ5D biolog.'
 
 gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
          main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
-
-
 ```
 
-```{r utfall_ny, echo=FALSE}
-
-
-Pso_individ_2015$PASI_grup <- as.numeric(cut(Pso_individ_2015$PASI_index, breaks = c(-0.1,4.9999,9.9999,500),labels=c(1,2,3)))
-Pso_bio$PASI_grup <- as.numeric(cut(Pso_bio$PASI_index, breaks = c(-0.1,4.9999,9.9999,5000),labels=c(1,2,3)))
-
-Pso_individ_2015$DLQI_grup <- as.numeric(cut(Pso_individ_2015$DLQI_index, breaks = c(-0.1,4.9999,9.9999,500),labels=c(1,2,3)))
-Pso_bio$DLQI_grup <- as.numeric(cut(Pso_bio$DLQI_index, breaks = c(-0.1,4.9999,9.9999,5000),labels=c(1,2,3)))
-
-
-Pso_kon=Pso_individ_2015
-Pso_kon = Pso_kon[as.numeric(Pso_kon$PERSNR) %ni% as.numeric(Pso_bio$PERSNR),]
-
-
-
+# PASI kliniknivå
+```{r PASI_helpop}
 figdata <- Pso_individ_2015 %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
       mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
       group_by(Sjukhus, PASI_grup) %>%
@@ -622,65 +735,67 @@ figdata <- Pso_individ_2015 %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PAS
 
 
 
-gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+```
 
-figtitle = 'PASI INDEX konvent.'
-
+# PASI kliniknivå, konventionella patienter
+```{r PASI_konventionell}
 figdata <- Pso_kon %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
       mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
       group_by(Sjukhus, PASI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+```
 
-figtitle = 'PASI INDEX biolog.'
-
+# PASI kliniknivå, biologiska patienter
+```{r PASI_biologisk}
 figdata <- Pso_bio %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
       mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
       group_by(Sjukhus, PASI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
 
+```
 
-
-gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
-
-
-#DLQI_index
-
+# DLQI kliniknivå
+```{r DLQI_helpop}
 figdata <- Pso_individ_2015 %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
       mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
       group_by(Sjukhus, DLQI_grup) %>%
       summarise(n = n()) %>% data.frame()
   
-figtitle = 'DLQI INDEX'
 
-gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
 
+gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+```
+
+
+# DLQI kliniknivå, konventionella patienter
+```{r DLQI_konventionell}
 figdata <- Pso_kon %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
       mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
       group_by(Sjukhus, DLQI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
 
-figtitle = 'DLQI INDEX konvent.'
-
-gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
 
 
+gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
+```
+
+# DLQI kliniknivå, biologiska patienter
+```{r DLQI_biologisk}
 figdata <- Pso_bio %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
       mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
       group_by(Sjukhus, DLQI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
-figtitle = 'DLQI INDEX biolog.'
-
-
-gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
 
 
 
+gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
 ```
 
 
@@ -703,105 +818,12 @@ figdata <- Pso_individ_2015 %>% select(Sjukhus, Smoker_Numb) %>% filter(!is.na(S
       group_by(Sjukhus, Smoke) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'Smoke', sjukhus = 'Sjukhus', main = "Andel rökare",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3) #kolla upp vad som är man resp kvinna
-
-```
-
-```{r biolog_vs_konvet, echo=FALSE}
-
-#Pso_bio=Pso_individ
-
-#Pso_bio=subset(Pso_bio,Contact_year==2015)
-
-Pso_kon$aktiv=2
-Pso_bio$aktiv=1
-
-TEMP11=subset(Pso_kon,select = c(PERSNR,Kön,BMI,aktiv,Sjukhus))
-TEMP22=subset(Pso_bio,select = c(PERSNR,Kön,BMI,aktiv,Sjukhus))
-
-Temp_data=rbind(TEMP11,TEMP22)
-  
-Temp_data$Gender_Numb=as.character(Temp_data$Kön)
-Temp_data$Gender_Numb[Temp_data$Gender_Numb=="Man"]<- 1
-Temp_data$Gender_Numb[Temp_data$Gender_Numb=="Kvinna"]<-2
-Temp_data$Gender_Numb=as.numeric(Temp_data$Gender_Numb)
-
-Temp_data$BMI_kategori <- cut(Temp_data$BMI, breaks = c(0,18.49999,24.99999,29.99999,100),labels=c("Undervikt","Normalvikt", "Övervikt", "Fetma"))
-
-
-Temp_data$BMI_kategori=as.character(Temp_data$BMI_kategori)
-Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Undervikt"]<- 1
-Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Normalvikt"]<-2
-Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Övervikt"]<- 3
-Temp_data$BMI_kategori[Temp_data$BMI_kategori=="Fetma"]<-4
-
-Temp_data$BMI_kategori=as.numeric(Temp_data$BMI_kategori)
-
-Temp_data$BIO=as.character(Temp_data$aktiv)
-Temp_data$BIO[Temp_data$BIO=="Ja"]<- 1
-Temp_data$BIO[Temp_data$BIO=="Nej"]<-2
-Temp_data$BIO=as.numeric(Temp_data$BIO)
-
-
-#figdata <- Pso_bio %>% select(Sjukhus, BMI_kategori, aktiv_biologisk) %>% 
- #   filter(!is.na(aktiv_biologisk)) %>%   mutate(BMI = cut(BMI_kategori, breaks = c(0,1,2,3,4), labels = c('Övervikt','Normalvikt','Underviktiv','Fetma')),
-   #          Sjukhus = factor(Sjukhus))
-
-figdata <- Temp_data %>% select(Sjukhus, BMI_kategori) %>% filter(!is.na(BMI_kategori)) %>% 
-      mutate(BMI = cut(BMI_kategori,  breaks = c(0,1,2,3,4), labels = c('Undervikt','Normalvikt','Övervikt','Fetma'))) %>% 
-      group_by(Sjukhus, BMI) %>%
-      summarise(n = n()) %>% data.frame()
-
-gbarplot(figdata, variable = 'BMI', sjukhus = 'Sjukhus', main = "Fördelning BMI",percent = T,addCI=F,sizelimit=10,plotcolors = t7_4)
-
-
-figdata <- Temp_data %>% select(Sjukhus, BIO) %>% filter(!is.na(BIO)) %>% 
-      mutate(BIOlog = cut(BIO,  breaks = c(0,1,2), labels = c('Bioligisk','Konvent'))) %>% 
-      group_by(Sjukhus, BIOlog) %>%
-      summarise(n = n()) %>% data.frame()
-
-gbarplot(figdata, variable = 'BIOlog', sjukhus = 'Sjukhus', main = "Fördelning behandling",percent = T,addCI=F,sizelimit=10,plotcolors = t7_2,plot.riket = 'no')
-
+gbarplot(figdata, variable = 'Smoke', sjukhus = 'Sjukhus', main = "Rökning",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3) #kolla upp vad som är man resp kvinna
 
 ```
 
 
 
 
-```{r behandling_ny, echo=FALSE}
-TempData=Aktiva_behandlingar
 
-v1=100*summary(Aktiva_behandlingar$DrugName)/length(TempData$DrugName)
-
-namn_new=vector()
-namn_pos=vector()
-
-for ( i in 1:length(v1)) {
-
-    if (v1[i]>1){
-      namn_new[i]=names(v1[i])
-    }
-}
-namn_new=as.character(na.omit(namn_new))
-
-TempData = subset(TempData, DrugName %in% namn_new)
-
-TempData$Behandling_num=as.numeric(factor(TempData$DrugName))
-namn=levels(factor(TempData$DrugName))
-
-
-
-figdata <- TempData %>% select(Sjukhus, Behandling_num) %>% filter(!is.na(Behandling_num)) %>% 
-      mutate(Behandling = cut(Behandling_num, breaks =rep(0:length(namn)),labels=namn)) %>% 
-      group_by(Sjukhus, Behandling) %>%
-      summarise(n = n()) %>% data.frame()
-
-
-mypalette<-brewer.pal(length(namn),"Set3")
-
-gbarplot(figdata, variable = 'Behandling', sjukhus = 'Sjukhus', main = "F",percent = T,addCI=F,sizelimit=10,plotcolors =mypalette)
-
-
-
-```
 
