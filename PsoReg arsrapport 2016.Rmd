@@ -1,17 +1,543 @@
 ---
-title: "PsoReg årsrapport 2016"
 author: "Martin"
 date: '`r Sys.Date()`'
-output: word_document
+title: "PsoReg årsrapport 2016"
+output:
+    pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    graphics: true
+    fig_caption: true
 ---
-
 
 ```{r global_options, include=FALSE}
 knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, fig.height=8, fig.width=8, cache=FALSE)
 ```
 
+
+```{r pyramidplotten, echo=FALSE, cache=TRUE}
+
+#' Standardpatient interface to ggpyramidplot
+#'
+#' Standardpatient interface to ggpyramidplot
+#'
+#' @param figdata is a correct specified dataframe containing the data
+#' @param sjukhus_name is the name of the hospital(grouping) variable
+#' @param variable_name is a string describing the name a variable
+#' @param stdpat_name is the name of the variable that seperates the 
+#' left from the right pane. If logical the data will be divided so
+#' all data will be on the left pane and all true values of stdpat_name will 
+#' be on the right. 
+#' If categorical (2 levels only), the left pane will conatain the first category
+#' and the right pane the second category. The factor levels will be used as
+#' titles for the panels
+#' @param main is the main plottitle
+#' @param legendrows rows in legend
+#' @param sizelimit is the minimal amount of subjects in each clinik.
+#'
+#' @details
+#' depends on ggplot2
+#' @author Gabriel Granåsen
+#' 
+#' @import ggplot2
+#' @import dplyr
+#' 
+#' @export
+
+# ggpyramid_std(figdata, main = figtitle, legend.rows = 3)
+ggpyramid_std <- function(figdata, sjukhus_name = 'PzSjukhusGeografiskt',
+                          variable_name = 'variable',
+                          stdpat_name = 'stdpat',
+                          main = '', legendrows = 3, 
+                          sizelimit = 10, plotwidths = c(5,2,5)/10,
+                          ...) {
+        
+        # Substitute column names
+        names(figdata) <- sub(variable_name,'variable',names(figdata))
+        names(figdata) <- sub(sjukhus_name,'sjukhus',names(figdata))
+        names(figdata) <- sub(stdpat_name,'stdpat',names(figdata))
+        
+        # Endast de med 10 eller fler observationer totalt
+        figdata <- figdata %>% group_by(sjukhus) %>% 
+                mutate(TOT = n()) %>% filter(TOT >= sizelimit) %>% 
+                select(-TOT) %>% droplevels()
+        
+        if (is.logical(figdata$stdpat)) {
+                
+                #Stdpatienter
+                figdata_stdpat <- figdata %>% 
+                        group_by(sjukhus, variable, stdpat) %>%
+                        filter(stdpat) %>% summarise(n = n()) %>% 
+                        group_by(sjukhus) %>% 
+                        mutate(ntot = sum(n)) %>% ungroup()
+                
+                # Alla patienter
+                figdata_alla <- figdata %>% 
+                        group_by(sjukhus, variable) %>%
+                        summarise(n = n()) %>% group_by(sjukhus) %>% 
+                        mutate(ntot = sum(n)) %>% ungroup()
+                
+                ggpyramid(figdata_alla, 'variable', figdata_stdpat,
+                          sjukhus_name = 'sjukhus', main = main,
+                          legendrows = legendrows, plotwidths = plotwidths,
+                          sizelimit = sizelimit)
+        } else {
+                
+                if (length(levels(figdata$stdpat)) != 2) {
+                        stop('Wrong number of levels in stpat_name. Should be 2.')
+                }
+                
+                #Stdpatienter
+                figdata_l <- figdata %>% 
+                        filter(stdpat == levels(stdpat)[1]) %>% 
+                        group_by(sjukhus, variable, stdpat) %>%
+                        summarise(n = n()) %>% ungroup()
+                
+                # Alla patienter
+                figdata_r <- figdata %>% 
+                        filter(stdpat == levels(stdpat)[2]) %>% 
+                        group_by(sjukhus, variable) %>%
+                        summarise(n = n()) %>% ungroup()
+                
+                ggpyramid(figdata_l, 'variable', figdata_r,
+                          sjukhus_name = 'sjukhus', main = main,
+                          legendrows = legendrows, sizelimit = sizelimit,
+                          dianames = levels(figdata$stdpat), plotwidths = plotwidths, ...)
+                
+        }
+}
+
+#' Pyramid plot using ggplot2
+#'
+#' Pyramid plot using ggplot2
+#'
+#' @param figdata_l figdata_r left and right data. Must include variable
+#' variable_l (and variable_r) and a column n with number of observatoions
+#' @param variable_l, variable_r strings representing variable names. 
+#' variable_r = NA shows that variable_l is used for both sides
+#' @param lr_variable factor with 2 levels. Defaults to 'stdpat'
+#' @param sjukhus_name defaults to 'PzSjukhusGeografiskt'
+#' @param desc defaults to TRUE is used for descending order
+#' @param dianames titles for left and right plot
+#' @param shortnames defaults to TRUE. Makes common long names in sjukhus_name shorter
+#' @param sizelimit is the minimal amount of subjects in each clinic,
+#' can be sepecified as one limit or \code{c(limit_l, limit_r)}
+#' @param plotcolors is an optional array of colors
+#' @param theme is a ggplot theme
+#' @param plotwidths is a vector of proportions of the subplots.
+#' Defaults to c(5,2,5)/10
+#'
+#' @details
+#' depends on ggplot2
+#' @author Gabriel Granåsen
+#' 
+#' @import ggplot2
+#' @import dplyr
+#' 
+#' @export
+
+ggpyramid <- function(figdata_l, variable_l, figdata_r, variable_r = NA,
+                      lr_variable = 'stdpat', 
+                      sjukhus_name = 'PzSjukhusGeografiskt',
+                      dianames = c("Alla patienter","Standardpatient"),
+                      labels = NULL, main = 'xxx', 
+                      percent = T, add.CI = T,
+                      idx = 1, Relevel = F, desc = TRUE, 
+                      legendrows = NA,
+                      plot.riket = c('both','line','bar','no'),
+                      shortnames = TRUE,
+                      sizelimit = 10,
+                      plotcolors = NA,
+                      theme = NA,
+                      plotwidths = c(5,2,5)/10, ...) {
+        
+        
+        plot.riket <- match.arg(plot.riket)
+        
+        # Set sizelimit as c(sizelimit_l, sizelimit_r)
+        if (length(sizelimit) == 1) {
+                sizelimit = c(sizelimit, sizelimit)
+        }
+        
+        if (is.na(variable_r)) {
+                variable_r = variable_l
+        }
+        
+        # byt variabelnamn
+        names(figdata_l) <- sub(variable_l,'variable',names(figdata_l))
+        names(figdata_l) <- sub(sjukhus_name,'sjukhus',names(figdata_l))
+        
+        names(figdata_r) <- sub(variable_r,'variable',names(figdata_r))
+        names(figdata_r) <- sub(sjukhus_name,'sjukhus',names(figdata_r))
+        
+        # Utöka materialet för att täcka in NA-kategorier
+        figdata_l <- figdata_l %>% dplyr::ungroup() %>% 
+                tidyr::expand(sjukhus, variable) %>% 
+                left_join(figdata_l) %>% mutate(n = ifelse(is.na(n),0,n)) %>% 
+                group_by(sjukhus) %>% mutate(ntot = sum(n), p = n/ntot) %>% 
+                filter(ntot >= sizelimit[1]) %>% 
+                droplevels %>% ungroup()
+        
+        figdata_r <- figdata_r %>% dplyr::ungroup() %>% 
+                tidyr::expand(sjukhus, variable) %>% 
+                left_join(figdata_r) %>% mutate(n = ifelse(is.na(n),0,n)) %>% 
+                group_by(sjukhus) %>% mutate(ntot = sum(n), p = n/ntot) %>% 
+                filter(ntot >= sizelimit[2]) %>% 
+                droplevels %>% ungroup()
+        
+        
+        # Dubbelkolla att sjukhusen är de samma i både figdata_l som i figdata_r
+        
+        if (length(setdiff(figdata_l$sjukhus, figdata_r$sjukhus)) != 0 |
+            length(setdiff(figdata_r$sjukhus, figdata_l$sjukhus)) != 0 ) {
+                selectedSjukhus <- intersect(figdata_l$sjukhus, figdata_r$sjukhus)
+                figdata_l <- figdata_l %>% filter(sjukhus %in% selectedSjukhus)
+                figdata_r <- figdata_r %>% filter(sjukhus %in% selectedSjukhus)
+        }
+        
+        
+        # Lägg till riket
+        if (plot.riket != 'no') {
+                riket_l <- figdata_l %>% group_by(variable) %>% 
+                        summarise(sjukhus = 'Riket', n = sum(n), ntot = sum(ntot), p = n/ntot)
+                riket_r <- figdata_r %>% group_by(variable) %>% 
+                        summarise(sjukhus = 'Riket', n = sum(n), ntot = sum(ntot), p = n/ntot)
+                
+                figdata_l$sjukhus <- factor(figdata_l$sjukhus, levels = c(levels(figdata_l$sjukhus),'Riket'))
+                figdata_r$sjukhus <- factor(figdata_r$sjukhus, levels = c(levels(figdata_r$sjukhus),'Riket'))
+                
+                figdata_l <- bind_rows(figdata_l, riket_l)
+                figdata_r <- bind_rows(figdata_r, riket_r)
+        }
+        
+        
+        # Hantera labels
+        # if (is.null(labels)) {
+        
+        #Lägg på ntot till figdata_r
+        figdata_r <- left_join(figdata_r, 
+                               figdata_l %>% group_by(sjukhus) %>% 
+                                       summarise(ntot_l = first(ntot)), 
+                               by = 'sjukhus')
+        
+        figdata_r <- figdata_r %>% ungroup() %>%
+                mutate(labels = paste(ntot_l, sjukhus, ntot, sep = ' '))
+        
+        figdata_l <- left_join(figdata_l, 
+                               figdata_r %>% group_by(sjukhus) %>% 
+                                       summarise(labels = first(labels)), 
+                               by = 'sjukhus')
+        # }
+        
+        # Plot colors & Legend rows
+        antal.kat_l <- length(levels(figdata_l$variable))
+        antal.kat_r <- length(levels(figdata_r$variable))
+        
+        if (is.na(plotcolors)) {
+                plotcolors_l <- RColorBrewer::brewer.pal(max(4,antal.kat_l),'PiYG')[max(4,antal.kat_l):1]
+                plotcolors_r <- RColorBrewer::brewer.pal(max(4,antal.kat_r),'PiYG')[max(4,antal.kat_r):1]
+        } else {
+                plotcolors_l <- plotcolors[1:antal.kat_l]
+                plotcolors_r <- plotcolors[1:antal.kat_r]
+        }
+        
+        # Number of rows in legend
+        if (is.na(legendrows)) {
+                legendrows_l = ceiling(antal.kat_l/3.9)
+                legendrows_r = ceiling(antal.kat_r/3.9)
+        } else{
+                if (length(legendrows) == 1) {legendrows = c(legendrows,legendrows)}
+                legendrows_l <- legendrows[1]
+                legendrows_r <- legendrows[2]
+        }
+        
+        # Set value column to percents(p) or count(n)
+        if (percent) {
+                figdata_l <- figdata_l %>% mutate(value = p)
+                figdata_r <- figdata_r %>% mutate(value = p)
+        }else{
+                figdata_l <- figdata_l %>% mutate(value = n)
+                figdata_r <- figdata_r %>% mutate(value = n)
+        }
+        
+        
+        #orda om labels efter p och 
+        #Sortera om labels efter första, sen andra sen tredje... kategorin
+        
+        #relevel på index av faktorordning
+        if (idx != 1) {
+                orig.order_r <- levels(figdata_r$variable)
+                orig.order_l <- levels(figdata_l$variable)
+                if (idx < 1) {
+                        figdata_r$variable <- factor(figdata_r$variable, levels = rev(orig.order_r))
+                        figdata_l$variable <- factor(figdata_l$variable, levels = rev(orig.order_l))
+                } else{
+                        figdata_r$variable <- relevel(figdata_r$variable, ref = idx)
+                        figdata_l$variable <- relevel(figdata_l$variable, ref = idx)
+                }
+        }
+        
+        # Sortera figdata_r uppdaterar sedan figdata_l
+        if (percent) {
+                figdata_r <- figdata_r %>% group_by(variable) %>% arrange(desc(p)) %>% 
+                        # ungroup() %>% 
+                        mutate(order = rank(p), 
+                               order = ifelse(p < 0.005, 0,order)) %>% 
+                        group_by(sjukhus) %>% 
+                        mutate(order2 = as.numeric(paste(sprintf('%03d', order*2), 
+                                                         collapse = ''))) %>% 
+                        ungroup %>% arrange(sjukhus,variable)
+                
+        } else {
+                figdata_r <- figdata_r %>% group_by(variable) %>% arrange(desc(n)) %>% 
+                        ungroup() %>% mutate(order = n():1, 
+                                             order = ifelse(n < 1, 0,order)) %>% 
+                        group_by(sjukhus) %>% mutate(order = max(order)) %>%
+                        ungroup %>% arrange(sjukhus,variable)
+                
+        }
+        
+        
+        if (desc) {
+                figdata_r$labels <- reorder(figdata_r$labels, figdata_r$order2)
+        } else {
+                figdata_r$labels <- reorder(figdata_r$labels, -figdata_r$order2)
+        }
+        figdata_l$labels <- factor(figdata_l$labels, levels = levels(figdata_r$labels))
+        
+        #relevel på index av faktorordning
+        if (idx != 1 & Relevel == F) {
+                figdata_r$variable <- factor(figdata_r$variable, levels = orig.order_r)
+                figdata_l$variable <- factor(figdata_l$variable, levels = orig.order_l)
+        }
+        
+        # Sortera om datat för att se att allt har gått bra.
+        figdata_r <- figdata_r %>% arrange(labels, variable)
+        figdata_l <- figdata_l %>% arrange(labels, variable)
+        
+        barwidth = 0.7
+        
+        # Labels ------------------------------------------------------------------
+        labeltextdata <- figdata_r %>% group_by(labels) %>% 
+                summarise(Riket = first(ifelse(sjukhus == 'Riket',2,1)),
+                          sjukhus = first(sjukhus),
+                          ntot_l = first(ntot_l),
+                          ntot_r = first(ntot))
+        
+        if (shortnames) {
+                #         labeltextdata <- labeltextdata %>% 
+                #             mutate(sjukhus = gsub('-Sunderbyn| NÄL','',sjukhus)) %>% 
+                #             mutate(sjukhus = gsub('Göteborg','Gbg',sjukhus))
+                labeltextdata$sjukhus <- gsub('-Sunderbyn|\\s+N.+L','',labeltextdata$sjukhus) 
+                labeltextdata$sjukhus <- gsub('G.+teborg','Gbg',labeltextdata$sjukhus)
+                labeltextdata$sjukhus <- gsub('Stockholm Sophia','Sophia',labeltextdata$sjukhus)
+                labeltextdata$sjukhus <- gsub('Stockholm GynSth','GynSthlm',labeltextdata$sjukhus)
+                labeltextdata$sjukhus <- gsub('Huddinge KS','Huddinge',labeltextdata$sjukhus)
+                labeltextdata$sjukhus <- gsub('Stockholm','Sthlm',labeltextdata$sjukhus)
+        }
+        
+        g_labels <- ggplot(data = figdata_r, aes(x = 1,y = labels)) +
+                geom_point(aes(fill = variable), size = 0, alpha = 0) +
+                geom_text(aes(x = 1, y = labels, 
+                              label = as.character(sjukhus), fontface = Riket), size = 4.5*10/14,
+                          data = labeltextdata, colour = theme_gynop_data['dktext']) +
+                geom_text(aes(x = 0.5, y = labels, 
+                              label = ntot_l, fontface = Riket), size = 4.5*10/14, hjust = 0,
+                          data = labeltextdata, colour = theme_gynop_data['dktext']) +
+                geom_text(aes(x = 1.5,y = labels, 
+                              label = ntot_r, fontface = Riket), size = 4.5*10/14, hjust = 1,
+                          data = labeltextdata, colour = theme_gynop_data['dktext']) +
+                
+                scale_fill_manual(values = plotcolors_r, guide = guide_legend(nrow = legendrows_r)) + 
+                
+                ggtitle("") + # För att sänka ned till rätt höjd
+                ylab(NULL) + # För att höja upp till rätt höjd
+                scale_x_continuous(expand = c(0,0)) + #c(0.94,1.065))+
+                theme_gynop_dark() +
+                # theme_ggpyramid() +
+                theme(
+                        axis.title = element_blank(),
+                        axis.text.y = element_blank(),
+                        axis.ticks.y = element_blank(),
+                        # axis.ticks.x = element_line(colour = rgb(.1,.2,.3,0)),
+                        axis.text.x = element_text(colour = rgb(.1,.2,.3,0)),
+                        axis.line = element_blank(),
+                        panel.grid = element_blank(),
+                        # panel.background = element_blank(),
+                        
+                        legend.background = element_blank(),
+                        legend.text = element_blank(),
+                        legend.key = element_blank(),
+                        # plot.background = element_blank(),
+                        plot.margin = grid::unit(c(1,1,1,-1.5), "mm")
+                )
+        
+        
+        # Left side ---------------------------------------------------------------
+        g_left <- ggplot(data = figdata_l, aes(x = labels, y = value, fill = variable)) + 
+                geom_bar(stat = "identity", width = barwidth) + 
+                geom_hline(aes(yintercept = 0), colour = theme_gynop_data["dkaxis"]) + 
+                scale_fill_manual(values = plotcolors_l, guide = guide_legend(nrow = legendrows_l)) + 
+                ggtitle(dianames[1])
+        
+        # Riket
+        if (plot.riket == 'both' | plot.riket == 'line') {
+                # lägg till linje för riket om det är procent
+                if (percent) {
+                        g_left <- g_left + 
+                                geom_hline(data = riket_l %>% filter(variable == levels(figdata_l$variable)[1]), 
+                                           aes(yintercept = p), colour = theme_gynop_data['riket_line'])
+                }
+        }
+        
+        # xlabel scaling
+        if (percent) {
+                g_left <- g_left + scale_y_reverse('', expand = c(0,0),labels = scale_percent) 
+        } else{
+                g_left <- g_left + scale_y_reverse('', expand = c(0,0))
+        }
+        
+        g_left <- g_left +
+                # theme_ggpyramid() +
+                theme_gynop_dark() + 
+                theme(plot.margin = grid::unit(c(1,1,1,-1), "mm"),
+                      #plot.background=element_rect(fill="slategray3"),
+                      axis.line.y = element_blank(),
+                      axis.text.y = element_blank(),
+                      plot.title = element_text(size = rel(1), face = "bold", hjust = 0)) +
+                coord_flip()
+        
+        
+        
+        # Right side --------------------------------------------------------------
+        g_right <- ggplot(data = figdata_r, aes(x = labels, y = value, fill = variable)) +
+                geom_bar(stat = "identity", width = barwidth) + 
+                scale_fill_manual(values = plotcolors_r, 
+                                  guide = guide_legend(nrow = legendrows_r)) + 
+                ggtitle(dianames[2])
+        
+        
+        # Riket
+        if (plot.riket == 'both' | plot.riket == 'line') {
+                # lägg till linje för riket om det är procent
+                if (percent) {
+                        g_right <- g_right + 
+                                geom_hline(data = riket_r %>% filter(variable == levels(figdata_r$variable)[1]), 
+                                           aes(yintercept = p), colour = theme_gynop_data['riket_line'])
+                }
+        }
+        
+        # xlabel scaling
+        if (percent) {
+                g_right <- g_right + scale_y_continuous('', limits = c(0,1), 
+                                                        expand = c(0,0),labels = scale_percent) 
+        } else{
+                g_right <- g_right + scale_y_continuous('', expand = c(0,0))
+        }
+        
+        # Theme
+        g_right <- g_right + theme_gynop_dark() +
+                # theme_ggpyramid() + 
+                coord_flip() + 
+                theme(
+                        # plot.margin = grid::unit(c(1,5,1,-5), "mm"), # Kontstigt. Har tagit bort för att fixa marginaler
+                        #plot.background=element_rect(fill="slategray3"),
+                        plot.margin = grid::unit(c(1,0,1,-1), "mm"),
+                        axis.text.y = element_blank(),
+                        plot.title = element_text(size = rel(1), face = "bold", hjust = 1)
+                )
+        
+        
+        
+        # Glue together -----------------------------------------------------------
+        gg_left <- ggplotGrob(g_left)
+        gg_right <- ggplotGrob(g_right)
+        gg_labels <- ggplotGrob(g_labels)
+        
+        # gemensam legend
+        if (identical(levels(figdata_l$variable),levels(figdata_r$variable))) {
+                
+                p <- grid_arrange_shared_legend(g_left, g_labels, g_right, 
+                                                ncol = 3, main = main,
+                                                widths = plotwidths)
+        } else{
+                
+                p <- gridExtra::arrangeGrob(gg_left ,gg_labels ,gg_right ,ncol = 3 ,
+                                            # widths=c(4/9,1/9,4/9), 
+                                            widths = plotwidths,
+                                            top = grid::textGrob(main,
+                                                                 gp = grid::gpar(col = theme_gynop_data["dktext"],
+                                                                                 fontsize = 12*1.2, 
+                                                                                 fontface = "bold"))
+                )
+        }
+        
+        grid::grid.draw(
+                grid::grobTree(
+                        grid::rectGrob(gp = gpar(fill = GynopTools::theme_gynop_data["dkbg"],
+                                                 col = GynopTools::theme_gynop_data["dkbg"])), 
+                        p)
+        )
+}
+
+
+#'grid_arrange_shared_legend
+#'
+#' Hidden function for putting together 3 ggplots with legend
+#' 
+#' @details
+#' depends on ggplot2
+#' @author Gabriel Granåsen
+#' 
+#' @import ggplot2
+#' 
+#' @export
+
+grid_arrange_shared_legend <- function(..., ncol = 3, main = 'xxx', widths = NULL) {
+        plots <- list(...)
+        
+        if (is.null(widths)) {
+                widths = rep(1, length(plots)) / length(plots)
+        }
+        
+        
+        g <- ggplot2::ggplotGrob(plots[[1]] + theme(legend.position = "bottom"))$grobs
+        legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
+        lheight <- sum(legend$height)
+        
+        plots_nolegend = lapply(plots, function(x)
+                x + theme(legend.position = "none"))
+        plots_nolegend$ncol = ncol
+        plots_nolegend$widths = widths
+        plots_nolegend$clip = F
+        
+        final_plot <- gridExtra::arrangeGrob(
+                do.call(gridExtra::arrangeGrob, plots_nolegend),
+                legend,
+                ncol = 1,
+                heights = grid::unit.c(grid::unit(.95, "npc") - lheight, lheight),
+                top = grid::textGrob(main, gp = grid::gpar(col = theme_gynop_data["dktext"],
+                                                           fontsize = 12*1.2, 
+                                                           fontface = "bold", lineheight = 0.90),
+                                     vjust = .75),
+                right = '', # Dummy för att få med %-tecken i plotten,
+                left = ''
+        )
+}
+
+# Hidden function for scaling percentages
+scale_percent <- function(x) {
+        x_scaled <- scales::percent(x)
+        x_formatted <- c(gsub('%','', x_scaled[1:(length(x_scaled) - 1)]), 
+                         x_scaled[length(x_scaled)])
+        x_formatted
+}
+```
+
+
+
 ```{r librarys, warning=FALSE, message = FALSE}
-library(knitr)
 library(stringr)
 library(GynopTools)
 library(data.table)
@@ -22,6 +548,9 @@ library(RColorBrewer)
 library(ggplot2)
 library(tidyr)
 library(pyramid)
+library(knitr)
+library(car)
+
 
 
 '%ni%' = Negate('%in%')
@@ -52,7 +581,7 @@ tm_1.2 <- "#2c7fb8"
 
 
 #Läser in data med kontakter från PsoReg
-Pso_contact <- read.delim(file="H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/data för PsoReg årsrapport 16/Kontaktnivå 20160224.txt",header=TRUE,sep="\t",encoding="UTF-8", dec=",")
+Pso_contact <- read.delim(file="H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/data för PsoReg årsrapport 16/Kontaktnivå 20160420.txt",header=TRUE,sep="\t",encoding="UTF-8", dec=",")
 
 
 #namnger variablerna ändra datatyper, plockar bort testpatienter och plockar bort kontakter utan kontaktdatum och kontakter efter 2015-12-31
@@ -91,14 +620,10 @@ if(length(grep(x=temp[i], patter="Hudmottagningen"))!=0)
 }
 
 
-Pso_contact$Sjukhus[Pso_contact$Sjukhus=="Länskliniken Hud Östergötland (21001) - Hudkliniken, Universite"] <- "Universitetssjukhuset Linköping"
+Pso_contact$Sjukhus[Pso_contact$Sjukhus=="Länskliniken Hud Östergötland (21001) - Hud"] <- "US Linköping"
 Pso_contact$Sjukhus[Pso_contact$Sjukhus=="Länskliniken Hud Östergötland (21001) - Hudkliniken, Vrinnev"] <- "Vrinnevisjukhuset Norrköping"
 
 
-#Sorterar datat och skapar en variabel som indikerar de unika individerna dupli_PatientID=FALSE=Sista kontakten per individ
-Pso_contact <- Pso_contact[order(Pso_contact$ContactDate,decreasing=T),]
-Pso_contact <- Pso_contact[order(Pso_contact$PERSNR,decreasing=FALSE),]
-Pso_contact$dupli_PatientID <- duplicated(Pso_contact$PERSNR)
 
 #lite fix
 Pso_contact$Contact_year <- 1900 + as.POSIXlt(Pso_contact$ContactDate)$year
@@ -123,6 +648,28 @@ Pso_contact$Ålder_kategori2 <-as.factor(Pso_contact$Ålder_kategori2)
 
 Pso_contact$BMI_kategori <- cut(Pso_contact$BMI, breaks = c(0,18.49999,24.99999,29.99999,100),labels=c("Undervikt","Normalvikt", "Övervikt", "Fetma"))
 
+Pso_contact$Smoker_Beskrivning <- factor(Pso_contact$Smoker_Beskrivning,levels= c(levels(Pso_contact$Smoker_Beskrivning)[4],levels(Pso_contact$Smoker_Beskrivning)[2],levels(Pso_contact$Smoker_Beskrivning)[3],levels(Pso_contact$Smoker_Beskrivning)[5],levels(Pso_contact$Smoker_Beskrivning)[1]))
+
+
+
+#Skapar dataset med föregående års data (sista kontakten per individ)
+Pso_contact_pre <- subset(Pso_contact, ContactDate<"2015-01-01") #ändra datum här!
+
+
+Pso_contact_pre <- Pso_contact_pre[order(Pso_contact_pre$ContactDate,decreasing=T),]
+Pso_contact_pre <- Pso_contact_pre[order(Pso_contact_pre$PERSNR,decreasing=FALSE),]
+Pso_contact_pre$dupli_PatientID <- duplicated(Pso_contact_pre$PERSNR)
+
+Pso_individ_pre_år<-subset(Pso_contact_pre,dupli_PatientID==FALSE)
+###########
+
+#Sorterar datat och skapar en variabel som indikerar de unika individerna dupli_PatientID=FALSE=Sista kontakten per individ
+Pso_contact <- Pso_contact[order(Pso_contact$ContactDate,decreasing=T),]
+Pso_contact <- Pso_contact[order(Pso_contact$PERSNR,decreasing=FALSE),]
+Pso_contact$dupli_PatientID <- duplicated(Pso_contact$PERSNR)
+
+
+
 #Skapar dataset med den senaste kontakten per individ
 Pso_individ<-subset(Pso_contact,dupli_PatientID==FALSE)
 ###############
@@ -139,7 +686,7 @@ Pso_individ<-subset(Pso_contact,dupli_PatientID==FALSE)
 
 
 #Läser in data med PsoReg data för att skapa dataset med behandlingar
-Pso_behandling <- read.csv("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/data för PsoReg årsrapport 16/Systembehandlingar 20160224.txt",header=TRUE,sep="\t",encoding="UTF-8")
+Pso_behandling <- read.csv("H:/Martin/PsoReg/Projekt PsoReg årsrapport 2016/årsrapport 2016 WD/data för PsoReg årsrapport 16/Systembehandlingar 20160420.txt",header=TRUE,sep="\t",encoding="UTF-8")
 
 names(Pso_behandling) <- c("PERSNR", "Pnyckel_systemictreat", "Fnyckel_systemictreat","Sjukhus", "InsertDate", "RemoveDate", "DrugName","biologisk","Aktiv_patient")
 Pso_behandling <- Pso_behandling[!(Pso_behandling$Sjukhus=="Test") ,]
@@ -167,8 +714,38 @@ Pso_behandling$DrugName[Pso_behandling$DrugName=="PUVA (bad, TMP)"] <- "PUVA"
 Pso_behandling$RemoveDate <- as.character(Pso_behandling$RemoveDate)
 
 
+##########
+Pso_behandling$biologisk2 <- as.character(Pso_behandling$biologisk)
+
+for(i in 1:nrow(Pso_behandling)){
+        
+        if(Pso_behandling$DrugName[i]=="Alitretinoin (Toctino)")
+                Pso_behandling$biologisk2[i] <- "Icke konventionell"
+        
+        if(Pso_behandling$DrugName[i]=="Fumaderm (Fumarsyra)")
+                Pso_behandling$biologisk2[i] <- "Icke konventionell"
+        
+        if(Pso_behandling$DrugName[i]=="Tioguanin (Lanvis)")
+                Pso_behandling$biologisk2[i] <- "Icke konventionell"
+        
+        if(Pso_behandling$DrugName[i]=="Apremilast (Otezla)")
+                Pso_behandling$biologisk2[i] <- "Icke konventionell"
+        
+        if(Pso_behandling$DrugName[i]=="Alfakalcidol (Etalpha)")
+                Pso_behandling$biologisk2[i] <- "Icke konventionell"
+        
+}
+
+Pso_behandling$biologisk2[Pso_behandling$biologisk2=="Ja"] <- "biologisk"
+Pso_behandling$biologisk2[Pso_behandling$biologisk2=="Nej"] <- "konventionell"
+
+########
+
+
+Pso_behandling <- subset(Pso_behandling, DrugName!="Efalizumab (Raptiva)")
+
 Pso_behandling$DrugName <- factor(Pso_behandling$DrugName)
-Pso_behandling$DrugName <- factor(Pso_behandling$DrugName,levels(Pso_behandling$DrugName)[c(12,1,4,6,13,9,15,3,5,10,8,2,11,16,14,7)])
+Pso_behandling$DrugName <- factor(Pso_behandling$DrugName,levels(Pso_behandling$DrugName)[c(11,1,6,12,8,14,3,4,5,9,2,7,10,15,13)])
 ####
 
 
@@ -242,8 +819,61 @@ Pso_individ_2015$DLQI_grup <- as.numeric(cut(Pso_individ_2015$DLQI_index, breaks
 Pso_bio <- subset(Pso_individ_2015, aktiv_biologisk=="Ja")
 Pso_kon <- subset(Pso_individ_2015, aktiv_biologisk=="Nej")
 
+###Skapa dataset med med sista kontakten föregående år#######
+
+##Skapar dataset med andast aktiva systembehandlingar föregående år
+Pso_behandling_pre <- subset(Pso_behandling,InsertDate<"2015-01-01")
+Aktiva_behandlingar_pre  <-  subset(Pso_behandling_pre,is.na(Pso_behandling_pre$RemoveDate)=="TRUE"|Pso_behandling_pre$RemoveDate>"2014-12-31")
+Aktiva_behandlingar_pre$DrugName <- as.factor(Aktiva_behandlingar_pre$DrugName)
+
+  
+
+#####
+tab_logic <- table(Aktiva_behandlingar_pre$DrugName)/sum(table(Aktiva_behandlingar_pre$DrugName))*100>1
+tab_logic <- data.frame(tab_logic)
+tab_logic <- data.frame(tab_logic, dimnames(tab_logic[[1]]))
+names(tab_logic) <- c("logisk", "Systembehandling")
+
+tab_logic <- subset(tab_logic, logisk==F)
+
+Aktiva_behandlingar_pre$DrugName2 <- as.character(Aktiva_behandlingar_pre$DrugName)
 
 
+
+for(i in 1:nrow(tab_logic)){
+Aktiva_behandlingar_pre$DrugName2[Aktiva_behandlingar_pre$DrugName2==as.character(tab_logic$Systembehandling)[i]] <- "Övriga"
+}
+
+Aktiva_behandlingar_pre$DrugName2 <- factor(Aktiva_behandlingar_pre$DrugName2)
+Aktiva_behandlingar_pre$DrugName2 <-factor(Aktiva_behandlingar_pre$DrugName2,levels(Aktiva_behandlingar_pre$DrugName2)[c(5,1,3,2,4,6,7)])
+
+#####
+
+
+### Lägger till en variabel som anger om patienten är biologisk patient till dataramen ##Pso_individ_pre_år
+
+Pso_tmp1 <- subset(Aktiva_behandlingar_pre, biologisk!="")
+Pso_tmp1 <- Pso_tmp1[order(Pso_tmp1$biologisk),]
+Pso_tmp1 <- Pso_tmp1[order(Pso_tmp1$PERSNR),]
+Pso_tmp1$dupli <- duplicated(Pso_tmp1$PERSNR)
+Pso_tmp1 <- subset(Pso_tmp1, dupli==FALSE)
+
+mergdata <- data.frame(PERSNR=Pso_tmp1$PERSNR,aktiv_biologisk=Pso_tmp1$biologisk)
+
+Pso_individ_pre_år <- merge(Pso_individ_pre_år, mergdata,all.x=TRUE, by.x="PERSNR", by.y="PERSNR")
+
+Pso_individ_2014 <- subset(Pso_individ_pre_år,Contact_year==2014)
+
+
+
+Pso_individ_2014$PASI_grup <- as.numeric(cut(Pso_individ_2014$PASI_index, breaks = c(-0.1,4.9999,9.9999,500),labels=c(1,2,3)))
+
+Pso_individ_2014$DLQI_grup <- as.numeric(cut(Pso_individ_2014$DLQI_index, breaks = c(-0.1,4.9999,9.9999,500),labels=c(1,2,3)))
+
+
+
+Pso_bio_2014 <- subset(Pso_individ_2014, aktiv_biologisk=="Ja")
+Pso_kon_2014 <- subset(Pso_individ_2014, aktiv_biologisk=="Nej")
 ```
 
 ```{r databearbetningar 3, echo=FALSE}
@@ -261,12 +891,16 @@ Pso_contact$Waist[Pso_contact$Waist<20] <- NA
 Pso_contact$BMI <- Pso_contact$Weight/(Pso_contact$Height/100)^2
 
 ```
+\newpage
 # Inledning
 
 I år har en stor revision av av PsoRegs årsrapport skett. Denna rapport fokuserar på registreringar som skett under kalenderåret 2015 och senaste registreringen innan tiden före årsslutet 2015. Vi har frångått indelningen i sjukvårdsregioner och vårdnivå och fokuserar nu på jämförelse mellan anslutna kliniker.
 Minst 10 patientregistreringar krävs för att en klinik skall inkluderas i respektive analys.
 
+\newpage
+
 # Anslutning
+
 
 ```{r tabell_patientantal, echo=FALSE}
 
@@ -274,13 +908,14 @@ tab_patienter <- sort(table(Pso_individ$Sjukhus), decreasing=TRUE)
 
 tab_patienter <- as.data.frame(tab_patienter)
 
-kable(tab_patienter)
+kable(tab_patienter,col.names=c( "Antal patienter"))
 ```
+
 
 *Tabell 1: Antal patienter i PsoReg vid årsskifte 2015/2016*
 
 
-# Patientregistrering över tid
+# Patientregistrering akumulerat over tid
 ```{r antal_pat_arsrapport, echo=FALSE}
 
 # Här skapas en plot för akumulerat antal inskrivna per år.
@@ -317,7 +952,8 @@ points(2006,sum(as.vector(artab[1:1,2])),pch = 20,col="firebrick1")
 
 ```
 
-```{r befolkningspyramid,fig.width=9,fig.height=7 ,echo=FALSE}
+# Alderfordelning uppdelat på kon
+```{r befolkningspyramid,fig.width=9,fig.height=7 ,echo=FALSE, fig.cap="Befolkningspyramiden visar åldersfördelningen för samtliga inskrivna patienter i PsoReg"}
 
 tabsa <- table(Pso_individ$Kön, Pso_individ$Ålder_kategori2)
 
@@ -333,7 +969,9 @@ pyramid(dat_pyr,Llab="Kvinnor",Rlab="Män",Lcol='#d7191c', Rcol='#2b83ba',Clab="
 
 ```
 
-```{r biolog_vs_konvet, echo=FALSE}
+
+## BMI fordelning uppdelat per klinik
+```{r BMI, echo=FALSE}
 
 #Pso_bio=Pso_individ
 
@@ -382,20 +1020,41 @@ figdata <- Temp_data %>% select(Sjukhus, BMI_kategori) %>% filter(!is.na(BMI_kat
       group_by(Sjukhus, BMI) %>%
       summarise(n = n()) %>% data.frame()
 
-gbarplot(figdata, variable = 'BMI', sjukhus = 'Sjukhus', main = "Fördelning BMI",percent = T,addCI=F,sizelimit=10,plotcolors = t7_4)
+gbarplot(figdata, variable = 'BMI', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_4)
 
 
-# Plockar ut data i lämplig form för gbarplot över behandling
-figdata <- Temp_data %>% select(Sjukhus, BIO) %>% filter(!is.na(BIO)) %>% 
-      mutate(BIOlog = cut(BIO,  breaks = c(0,1,2), labels = c('Bioligisk','Konvent'))) %>% 
-      group_by(Sjukhus, BIOlog) %>%
-      summarise(n = n()) %>% data.frame()
-
-gbarplot(figdata, variable = 'BIOlog', sjukhus = 'Sjukhus', main = "Fördelning behandling",percent = T,addCI=F,sizelimit=10,plotcolors = t7_2,plot.riket = 'no')
 
 
 ```
 
+## Antal biologiska patienter
+```{r antal_biologiska}
+Pso_tmp2 <- subset(Aktiva_behandlingar, biologisk2!="")
+Pso_tmp2$biologisk2 <- factor(Pso_tmp2$biologisk2)
+
+Pso_tmp2 <- Pso_tmp2[order(Pso_tmp2$biologisk2),]
+Pso_tmp2 <- Pso_tmp2[order(Pso_tmp2$PERSNR),]
+Pso_tmp2$dupli <- duplicated(Pso_tmp2$PERSNR)
+Pso_tmp2 <- subset(Pso_tmp2, dupli==FALSE)
+
+mergdata2 <- data.frame(PERSNR=Pso_tmp2$PERSNR,aktiv_biologisk2=Pso_tmp2$biologisk2)
+
+Pso_individ2 <- merge(Pso_individ, mergdata2,all.x=TRUE, by.x="PERSNR", by.y="PERSNR")
+
+
+
+# Plockar ut data i lämplig form för gbarplot över behandling
+figdata <- Pso_individ2 %>% select(Sjukhus, aktiv_biologisk2) %>% filter(!is.na(aktiv_biologisk2)) %>% 
+     #mutate(BIOlog = cut(BIO,  breaks = c(0,1), labels = c('Biologisk'))) %>% 
+      group_by(Sjukhus, aktiv_biologisk2) %>%
+      summarise(n = n()) %>% data.frame()
+
+figdata <- subset(figdata, aktiv_biologisk2!="konventionell")
+figdata$aktiv_biologisk2 <- factor(figdata$aktiv_biologisk2)
+
+gbarplot(figdata, variable = 'aktiv_biologisk2',sjukhus = 'Sjukhus', main = "",percent = F,addCI=F,sizelimit=10,plotcolors = c("#2b8cbe", "#a6bddb"), plot.riket="no",stacked = T) 
+
+```
 
 
 # Systembehandlingar
@@ -412,23 +1071,22 @@ Systembehandling <- Aktiva_behandlingar$DrugName
 
 plot1 <- table(Systembehandling)/sum(table(Systembehandling))*100
 
-antal <- paste(table(Systembehandling),"\n(",round(as.numeric(plot1)),"%",")",sep="")
+antal <- table(Systembehandling)
 
-col_stapel <- c(rep(tm_1.1,9),rep(tm_1.2,7))
+col_stapel <- c(rep("#ece7f2",4),rep("#a6bddb",5),rep("#2b8cbe",6))
 
 par(mar=c(11.1, 4.1 , 4.1 , 1.1),cex=1.2)
 bar1 <- barplot(plot1,ylab="Andel pågående Systembehandlingar (%)",las=2,col=col_stapel,ylim=c(0,max(plot1)*1.2),space=c(0,0.5))
 
 text(bar1, plot1, antal,cex=1,pos=3)
-
+legend("center",col=c("#ece7f2","#a6bddb","#2b8cbe"),legend=c("Konventionell behandling","Icke konventionell behandling", "biologisk behandling"), fill=c("#ece7f2","#a6bddb","#2b8cbe"))
 
 #legend("topright","groups",ncol=1,c("Riket",print(klin_aktiva_behandlingar$sjukhusnamn_miljo[1])),
  #      fill=c("cadetblue","goldenrod3"),cex=1)
 
 ```
 
-```{r stapel_kombinationsbehandlingar, echo=FALSE, eval=TRUE,fig.width=7, fig.height=6, cache=FALSE}
-
+```{r stapel_kombinationsbehandlingar, echo=FALSE, eval=TRUE,fig.width=6, fig.height=5, cache=FALSE}
 sys <- Aktiva_behandlingar
 sys$DrugName <- as.character(sys$DrugName)
 sys$PERSNR <- factor(sys$PERSNR)
@@ -471,8 +1129,6 @@ sys3$Alitretinoin..Toctino.[sys3$Alitretinoin..Toctino.=="1"] <- "Alitretinoin"
 sys3$Ciklosporin..Sandimmum. <- as.character(sys3$Ciklosporin..Sandimmum.)
 sys3$Ciklosporin..Sandimmum.[sys3$Ciklosporin..Sandimmum.=="1"] <- "Ciklosporin"
 
-sys3$Efalizumab..Raptiva. <- as.character(sys3$Efalizumab..Raptiva.)
-sys3$Efalizumab..Raptiva.[sys3$Efalizumab..Raptiva.=="1"] <- "Efalizumab"
 
 sys3$Etanercept..Enbrel. <- as.character(sys3$Etanercept..Enbrel.)
 sys3$Etanercept..Enbrel.[sys3$Etanercept..Enbrel.=="1"] <- "Etanercept"
@@ -595,7 +1251,7 @@ tabl <- as.table(tabl[order(tabl,decreasing=TRUE)][1:10])
 tabl <- tabl[order(tabl,decreasing=FALSE)]
 
 par(mar=c(3,15,2,2))
-bar1 <- barplot(tabl,las=2,horiz=TRUE,col=t7_1,main="Kombinationsbehandingar",xaxt="n",xlim=c(0,max(tabl)+25),cex.main=0.9)
+bar1 <- barplot(tabl,las=2,horiz=TRUE,cex.names=0.8,col=t7_1,main="Kombinationsbehandingar",xaxt="n",xlim=c(0,max(tabl)+25),cex.main=0.9)
 axis(side=1)
 text(tabl,bar1,tabl,cex=0.8,pos=4)
 ```
@@ -684,28 +1340,6 @@ names(tabel_behand)[1] <- "Systembehandling"
 ```
 
 
-```{r area plot_systembehandlingar, fig.height=6}
-
-
-
-data_plot2 <-  Pso_linjegrafdata %>% group_by(År_behandling, Systembehandling) %>% 
-        summarise(antal = n()) %>% 
-        mutate(ntot = sum(antal), p = antal/ntot*100)
-
-fargval<-brewer.pal(length(levels(data_plot2$Systembehandling)),"Set3")
-fargval <- rep(fargval,5)
-
-qplot(År_behandling, p, data=data_plot2, geom="area", 
-       fill = Systembehandling, xlab="År", ylab="Andel (%)") +
-        # scale_fill_manual(values = fargval)
-        scale_fill_brewer(palette = 'Set3')
-
-
-
-
-
-#+        GynopTools::theme_gynop()
-```
 
 ```{r tabell_systembehandlingar}
 kable(tabel_behand)
@@ -740,8 +1374,9 @@ gbarplot(figdata, variable = 'Behandling', sjukhus = 'Sjukhus', main = "",percen
 ```
 
 
-# EQ-5D kliniknivå
-```{r EQ-5D_helpop}
+## EQ-5D kliniknivå
+
+```{r EQ-5D_helpop, fig.cap="Detta är också en figurtext",fig.env='figure'}
 #EQ5D_index
 
 figdata <- Pso_individ_2015 %>% select(Sjukhus, EQ5D_index)
@@ -751,6 +1386,8 @@ figtitle = 'EQ5D INDEX'
 gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
          main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
 ```
+
+
 
 # EQ-5D kliniknivå, konventionella patienter
 ```{r EQ-5D_konventionell}
@@ -772,22 +1409,11 @@ gdotplot(figdata, variable = 'EQ5D_index', sjukhus = 'Sjukhus',
          main = figtitle, addmedian = F, whitelines = F) + theme_gynop(grid = 'v')
 ```
 
-# PASI kliniknivå
-```{r PASI_helpop}
-figdata <- Pso_individ_2015 %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
-      mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
-      group_by(Sjukhus, PASI_grup) %>%
-      summarise(n = n()) %>% data.frame()
-
-
-
-gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
-```
 
 # PASI kliniknivå, konventionella patienter
 ```{r PASI_konventionell}
 figdata <- Pso_kon %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
-      mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('PASI 0-5','PASI 5-10','PASI > 10'))) %>% 
       group_by(Sjukhus, PASI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
@@ -797,7 +1423,7 @@ gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "",percent
 # PASI kliniknivå, biologiska patienter
 ```{r PASI_biologisk}
 figdata <- Pso_bio %>% select(Sjukhus, PASI_grup) %>% filter(!is.na(PASI_grup)) %>% 
-      mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      mutate(PASI_grup = cut(PASI_grup,  breaks = c(0,1,2,3), labels = c('PASI 0-5','PASI 5-10','PASI > 10'))) %>% 
       group_by(Sjukhus, PASI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
@@ -805,23 +1431,12 @@ gbarplot(figdata, variable = 'PASI_grup', sjukhus = 'Sjukhus', main = "",percent
 
 ```
 
-# DLQI kliniknivå
-```{r DLQI_helpop}
-figdata <- Pso_individ_2015 %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
-      mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
-      group_by(Sjukhus, DLQI_grup) %>%
-      summarise(n = n()) %>% data.frame()
-  
-
-
-gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "",percent = T,addCI=F,sizelimit=10,plotcolors = t7_3)
-```
 
 
 # DLQI kliniknivå, konventionella patienter
 ```{r DLQI_konventionell}
 figdata <- Pso_kon %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
-      mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('DLQI 0-5','DLQI 5-10','DLQI > 10'))) %>% 
       group_by(Sjukhus, DLQI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
@@ -834,7 +1449,7 @@ gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "",percent
 # DLQI kliniknivå, biologiska patienter
 ```{r DLQI_biologisk}
 figdata <- Pso_bio %>% select(Sjukhus, DLQI_grup) %>% filter(!is.na(DLQI_grup)) %>% 
-      mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('0-5','5-10','10-'))) %>% 
+      mutate(DLQI_grup = cut(DLQI_grup,  breaks = c(0,1,2,3), labels = c('DLQI 0-5','DLQI 5-10','DLQI > 10'))) %>% 
       group_by(Sjukhus, DLQI_grup) %>%
       summarise(n = n()) %>% data.frame()
 
@@ -848,6 +1463,11 @@ gbarplot(figdata, variable = 'DLQI_grup', sjukhus = 'Sjukhus', main = "",percent
 
 
 
+
+
+
+
+# Rökning
 ```{r rokare, echo=FALSE}
 
 
@@ -860,7 +1480,7 @@ Pso_individ_2015$Smoker_Numb[Pso_individ_2015$Smoker_Numb=="Nej"]<-3
 Pso_individ_2015$Smoker_Numb=as.numeric(Pso_individ_2015$Smoker_Numb)
 
 figdata <- Pso_individ_2015 %>% select(Sjukhus, Smoker_Numb) %>% filter(!is.na(Smoker_Numb)) %>% 
-      mutate(Smoke = cut(Smoker_Numb, breaks = c(0,1,2,3), labels = c('Ja','Slutat','Nej'))) %>% 
+      mutate(Smoke = cut(Smoker_Numb, breaks = c(0,1,2,3), labels = c('Rökare','Tidigare rökare','Icke rökare'))) %>% 
       group_by(Sjukhus, Smoke) %>%
       summarise(n = n()) %>% data.frame()
 
@@ -868,6 +1488,86 @@ gbarplot(figdata, variable = 'Smoke', sjukhus = 'Sjukhus', main = "",percent = T
 
 ```
 
+```{r jmf_PASI, echo=FALSE}
+
+Pso_individ_2014$ar=2014
+Pso_individ_2015$ar=2015
+
+Pso_14 <- Pso_individ_2014 %>% select(PASI_grup,DLQI_grup,Sjukhus,ar, Smoker_Beskrivning, BMI_kategori)
+Pso_15 <- Pso_individ_2015 %>% select(PASI_grup,DLQI_grup,Sjukhus,ar, Smoker_Beskrivning, BMI_kategori)
+
+super_pso=rbind(Pso_15,Pso_14)
+super_pso$ar <- factor(super_pso$ar)
+super_pso$ar <- factor(super_pso$ar, levels=c(levels(super_pso$ar)[2],levels(super_pso$ar)[1]))
+
+# PASI jämförelse 
+figdata3 <- super_pso %>% select(Sjukhus, PASI_grup, ar) %>% filter(!is.na(PASI_grup)) %>% 
+      mutate(quarter = cut(PASI_grup, breaks= c(0,1,2,3), labels = c('PASI 0-5','PASI 5-10','PASI > 10')),
+             origin =as.factor(ar),
+             carrier = factor(Sjukhus)) %>% droplevels()
+
+#figdata3$origin <- factor(figdata3$origin,levels=c(levels(figdata3$origin)[2],levels(figdata3$origin)[1]))
+             
+
+# PASI pyramid 
+ggpyramid_std(figdata3, sjukhus_name = 'carrier',variable_name = 'quarter',
+              stdpat_name = 'origin',
+              legendrows = 1, main = "",plotcolors = t7_3, plotwidths = c(0.42, 0.36, 0.42), plot.riket="bar")
+
+```
+
+```{r jmf_DLQI, echo=FALSE}
+
+# DLQI jämförelse 
+figdata3 <- super_pso %>% select(Sjukhus, DLQI_grup, ar) %>% filter(!is.na(DLQI_grup)) %>% 
+      mutate(quarter = cut(DLQI_grup, breaks= c(0,1,2,3), labels = c('DLQI 0-5','DLQI 5-10','DLQI > 10')),
+             origin =as.factor(ar),
+             carrier = factor(Sjukhus)) %>% droplevels()
+
+#figdata3$origin <- factor(figdata3$origin,levels=c(levels(figdata3$origin)[2],levels(figdata3$origin)[1]))
+             
+
+# DLQI pyramid 
+ggpyramid_std(figdata3, sjukhus_name = 'carrier',variable_name = 'quarter',
+              stdpat_name = 'origin',
+              legendrows = 1, main = "",plotcolors = t7_3, plotwidths = c(0.42, 0.36, 0.42), plot.riket="bar")
+```
+
+
+```{r jmf_BMI, echo=FALSE}
+
+# DLQI jämförelse 
+figdata3 <- super_pso %>% select(Sjukhus, BMI_kategori, ar) %>% filter(!is.na(BMI_kategori)) %>% 
+             mutate(quarter = BMI_kategori,
+             origin =as.factor(ar),
+             carrier = factor(Sjukhus)) %>% droplevels()
+
+#figdata3$origin <- factor(figdata3$origin,levels=c(levels(figdata3$origin)[2],levels(figdata3$origin)[1]))
+             
+
+# DLQI pyramid 
+ggpyramid_std(figdata3, sjukhus_name = 'carrier',variable_name = 'quarter',
+              stdpat_name = 'origin',
+              legendrows = 1, main = "",plotcolors = t7_4, plotwidths = c(0.42, 0.36, 0.42), plot.riket="bar")
+```
+
+
+```{r jmf_Rokning, echo=FALSE,fig.cap="Detta är en bildtext"}
+
+# DLQI jämförelse 
+figdata3 <- super_pso %>% select(Sjukhus, Smoker_Beskrivning, ar) %>% filter(!is.na(Smoker_Beskrivning)&Smoker_Beskrivning!="Okänt"&Smoker_Beskrivning!="") %>% 
+      mutate(quarter = Recode(Smoker_Beskrivning, "'Ja, röker'='Rökare'; 'Nej'='Icke rökare'; 'Har slutat röka'='Tidigare rökare'"),
+             origin =as.factor(ar),
+             carrier = factor(Sjukhus)) %>% droplevels()
+
+#figdata3$origin <- factor(figdata3$origin,levels=c(levels(figdata3$origin)[2],levels(figdata3$origin)[1]))
+             
+
+# DLQI pyramid 
+ggpyramid_std(figdata3, sjukhus_name = 'carrier',variable_name = 'quarter',
+              stdpat_name = 'origin',
+              legendrows = 1, main = "",plotcolors = t7_3, plotwidths = c(0.42, 0.36, 0.42), plot.riket="bar")
+```
 
 
 
